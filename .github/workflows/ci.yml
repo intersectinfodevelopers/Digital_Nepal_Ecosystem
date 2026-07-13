@@ -75,6 +75,15 @@ jobs:
           name: production-app
           path: .
 
+      - name: Rename downloaded JAR for runtime build
+        run: |
+          if [ -f production-app/production-app.jar ]; then
+            mv production-app/production-app.jar app.jar
+          elif [ -f production-app.jar ]; then
+            mv production-app.jar app.jar
+          fi
+          ls -la
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v2
         with:
