@@ -24,7 +24,19 @@
         <dependency>
             <groupId>np.gov.digital</groupId>
             <artifactId>platform-audit</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Reuse SparrowSmsService from platform-idcard (Day 9 task doc) -->
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>platform-idcard</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>platform-idcard</artifactId>
             <version>1.0.0</version>
+            <scope>compile</scope>
         </dependency>
     </dependencies>
 
