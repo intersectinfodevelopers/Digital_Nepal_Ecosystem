@@ -15,9 +15,8 @@ COPY mvnw mvnw
 COPY pom.xml .
 COPY modules/ modules/
 
-# NOTE: `stub-backend` is the canonical runnable Spring Boot module in this multi-module project.
-# The CI pipeline and Docker runtime image expect the artifact to be produced at
-# `modules/stub-backend/target/*.jar` and will use that JAR as the application entrypoint.
+# The bootstrap module is the canonical runnable Spring Boot application. It
+# includes every business module and the shared API documentation resources.
 
 # Ensure wrapper is executable and run a full multi-module build
 RUN chmod +x mvnw || true
@@ -25,11 +24,11 @@ RUN chmod +x mvnw || true
 RUN apt-get update && apt-get install -y --no-install-recommends curl unzip ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Use the wrapper to build the project
-RUN ./mvnw -B  -DskipTests clean package -pl modules/stub-backend -am
+RUN ./mvnw -B -DskipTests clean package -pl modules/bootstrap -am
 
 # Target the explicitly named production binary—no wildcards, no guessing!
 RUN mkdir -p /build-output && \
-    cp modules/stub-backend/target/production-app.jar /build-output/app.jar
+    cp modules/bootstrap/target/*.jar /build-output/app.jar
 
 # ============================================================================
 # STAGE 2: RUNTIME

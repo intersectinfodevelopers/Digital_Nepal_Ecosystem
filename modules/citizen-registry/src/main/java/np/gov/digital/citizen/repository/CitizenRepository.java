@@ -15,9 +15,17 @@ import java.util.UUID;
 @Repository
 public interface CitizenRepository extends JpaRepository<Citizen, UUID> {
 
+    // DEPRECATED — see Citizen.nidHash. Use the *NidHmac* methods below for
+    // all new duplicate-detection logic.
+    @Deprecated
     Optional<Citizen> findByNidHashAndIsActiveTrue(String nidHash);
 
+    @Deprecated
     boolean existsByNidHashAndIsActiveTrue(String nidHash);
+
+    Optional<Citizen> findByNidHmacAndIsActiveTrue(String nidHmac);
+
+    boolean existsByNidHmacAndIsActiveTrue(String nidHmac);
 
     Optional<Citizen> findByCitizenshipNoNormAndIsActiveTrue(String citizenshipNoNorm);
 

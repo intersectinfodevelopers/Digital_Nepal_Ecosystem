@@ -31,6 +31,7 @@ hs_err_pid*
 .env
 .env.local
 .env.*.local
+keys/
 
 # OS
 .DS_Store

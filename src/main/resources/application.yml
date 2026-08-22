@@ -8,7 +8,13 @@ spring:
   datasource:
     url: jdbc:postgresql://${DB_HOST:db}:${DB_PORT:5432}/${DB_NAME:digital_nepal}
     username: ${DB_USER:postgres}
-    password: ${DB_PASSWORD:postgres}
+    # SECURITY FIX: no default here anymore. The old ${DB_PASSWORD:postgres}
+    # default meant staging/prod would silently connect with the password
+    # "postgres" if the env var was ever missing from a deploy — the same
+    # class of bug as the encryption-key default fixed below. The dev
+    # profile block further down restores a convenience default for local
+    # docker-compose use only.
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 20
@@ -21,7 +27,14 @@ spring:
   # ========================================================================
   jpa:
     hibernate:
-      ddl-auto: update
+      # CHANGED from "update" to "validate": now that Flyway (above) is the
+      # explicit, version-controlled source of truth for schema, letting
+      # Hibernate also auto-alter tables on startup risks silent schema
+      # drift between what Flyway thinks it applied and what's actually in
+      # the database. "validate" makes Hibernate fail loudly if the JPA
+      # entities and the Flyway-managed schema disagree, instead of quietly
+      # patching around the mismatch.
+      ddl-auto: validate
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -36,6 +49,18 @@ spring:
 
 
 
+
+  # ========================================================================
+  # FLYWAY
+  # ========================================================================
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-description: "init"
+    baseline-version: 0
+    locations: classpath:db/migrations
+    user: ${spring.datasource.username}
+    password: ${spring.datasource.password}
 
   # ========================================================================
   # JACKSON
@@ -65,9 +90,25 @@ spring:
       max-file-size: 10MB
       max-request-size: 20MB
 
-# ========================================================================
+# ==========================================================================
+# APP — encryption key + HMAC pepper for citizen PII (NidEncryptionUtil)
+#
+# SECURITY: deliberately NO default values here. ENCRYPTION_KEY and PEPPER
+# must be injected from HashiCorp Vault (prod) or a local .env file that is
+# gitignored (dev) — see SDD Section 3.4. If either is missing, the app
+# fails to start (see NidEncryptionUtil's constructor validation) rather
+# than silently falling back to a value anyone with repo access already
+# knows, which is exactly the bug this replaces.
+# ==========================================================================
+app:
+  encryption:
+    key: ${ENCRYPTION_KEY}
+  pepper: ${PEPPER_SECRET}
+  pepper-version: ${PEPPER_VERSION:v1}
+
+# ==========================================================================
 # SERVER
-# ========================================================================
+# ==========================================================================
 server:
   port: ${SERVER_PORT:8080}
   servlet:
@@ -79,14 +120,26 @@ server:
     include-message: always
     include-binding-errors: always
 
-# ========================================================================
+# ==========================================================================
 # ACTUATOR
-# ========================================================================
+#
+# SECURITY FIX: removed "env" and "loggers" from the exposed endpoints.
+# /actuator/env dumps resolved property values — Spring Boot only
+# auto-redacts property names containing "password", "secret", "credentials"
+# by default, which does NOT cover this project's app.pepper or a
+# differently-named key. There is no separate actuator authentication/
+# network-restriction config visible anywhere in this project, so exposing
+# env here would have been a direct path to leaking ENCRYPTION_KEY/PEPPER_SECRET
+# to anyone who can reach this port. "loggers" allows runtime log-level
+# changes over HTTP — also admin-grade, also not access-controlled here.
+# Re-add only behind a dedicated actuator port/network policy + its own auth,
+# never on the same exposure as the public API.
+# ==========================================================================
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,env,loggers
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: when-authorized
@@ -123,9 +176,19 @@ spring:
   config:
     activate:
       on-profile: dev
+  datasource:
+    # Dev-only convenience default — matches docker-compose's local
+    # Postgres container. Staging/prod have no such default (see base
+    # config) and will fail to start without a real DB_PASSWORD.
+    password: ${DB_PASSWORD:postgres}
   jpa:
     hibernate:
-      ddl-auto: update
+      # See base config comment — Flyway is the schema source of truth even
+      # in dev. If you're actively iterating on entity mappings and want
+      # Hibernate to scaffold tables for you locally before you've written
+      # the migration yet, override this to "update" on your own machine —
+      # just don't commit that change.
+      ddl-auto: validate
   jackson:
     serialization:
       indent-output: true

@@ -16,7 +16,7 @@ import java.util.UUID;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/grievances")
+@RequestMapping("/v1/grievances")
 @RequiredArgsConstructor
 public class GrievanceController {
 

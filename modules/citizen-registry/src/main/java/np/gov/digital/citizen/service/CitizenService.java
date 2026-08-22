@@ -48,18 +48,30 @@ public class CitizenService {
         Ward ward = wardRepository.findById(request.getWardId())
                 .orElseThrow(() -> new WardNotFoundException(request.getWardId()));
 
-        // STEP 2 — Hash NID for duplicate check
-        String nidHash = nidEncryptionUtil.hash(request.getNid());
+        // STEP 2 — Compute pepper-based HMAC for duplicate check (SDD
+        // Critical Implementation Note #2). We also still compute the
+        // legacy plain-SHA-256 hash below purely so nid_hash stays
+        // populated for existing NOT NULL constraint compatibility during
+        // the V16 migration's transition period — it is not used for the
+        // uniqueness decision anymore.
+        String nidHmac = nidEncryptionUtil.hmac(request.getNid());
+        // legacy column, not used for the uniqueness decision anymore:
+        String nidHashLegacy = nidEncryptionUtil.hash(request.getNid());
 
-        // STEP 3 — Duplicate check
-        if (citizenRepository.existsByNidHashAndIsActiveTrue(nidHash)) {
-            log.warn("Duplicate NID registration attempt — nidHash: {}", nidHash);
+        // STEP 3 — Duplicate check (HMAC-based, not the brute-forceable
+        // plain hash)
+        if (citizenRepository.existsByNidHmacAndIsActiveTrue(nidHmac)) {
+            // Deliberately do not log the HMAC value itself — it is
+            // derived from a secret pepper and, while not reversible to the
+            // NID without the pepper, there is no operational reason to put
+            // it in logs either.
+            log.warn("Duplicate NID registration attempt for ward {}", request.getWardId());
             auditLogService.log(
                     AuditEventType.DUPLICATE_NID_ATTEMPT,
                     null,
-                    "Duplicate NID attempt — hash: " + nidHash
+                    "Duplicate NID attempt — ward: " + request.getWardId()
             );
-            throw new DuplicateNidException(nidHash);
+            throw new DuplicateNidException("A citizen with this NID is already registered.");
         }
 
         // STEP 4 — Encrypt PII fields
@@ -83,7 +95,8 @@ public class CitizenService {
         Citizen citizen = Citizen.builder()
                 .ward(ward)
                 .nidEnc(nidEnc)
-                .nidHash(nidHash)
+                .nidHash(nidHashLegacy)
+                .nidHmac(nidHmac)
                 .citizenshipNoEnc(citizenshipNoEnc)
                 .citizenshipNoNorm(citizenshipNoNorm)
                 .passportNoEnc(passportNoEnc)

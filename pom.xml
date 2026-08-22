@@ -19,6 +19,7 @@
     <modules>
         <module>modules/auth</module>
         <module>modules/citizen-registry</module>
+        <module>modules/household</module>
         <module>modules/employment</module>
         <module>modules/health</module>
         <module>modules/education</module>
@@ -32,6 +33,7 @@
         <module>modules/platform-sync</module>
         <module>modules/platform-grievance</module>
         <module>modules/platform-audit</module>
+        <module>modules/bootstrap</module>
     </modules>
 
     <!-- ================================================================ -->

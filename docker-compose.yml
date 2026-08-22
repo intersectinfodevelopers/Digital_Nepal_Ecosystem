@@ -1,15 +1,12 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgis/postgis:16-3.4
-    container_name: digital-nepal-db
     environment:
       POSTGRES_DB: digital_nepal
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "${HOST_DB_PORT:-5432}:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     networks:
@@ -30,10 +27,17 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: digital-nepal-backend
     environment:
       SPRING_PROFILES_ACTIVE: dev
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/digital_nepal
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: digital_nepal
+      DB_USER: postgres
+      JWT_PRIVATE_KEY_PEM: file:/opt/digital-nepal/keys/private.pem
+      JWT_PUBLIC_KEY_PEM: file:/opt/digital-nepal/keys/public.pem
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
+      PEPPER_SECRET: ${PEPPER_SECRET:?Set PEPPER_SECRET in .env}
+      PEPPER_VERSION: ${PEPPER_VERSION:-v1}
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
       SPRING_REDIS_HOST: redis
@@ -42,13 +46,15 @@ services:
       JAVA_OPTS: "-Xmx512m -Xms256m"
     ports:
       - "${APP_PORT:-8080}:8080"
+    volumes:
+      - ./keys:/opt/digital-nepal/keys:ro
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - digital-nepal-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/actuator/health"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -70,7 +76,6 @@ services:
 
   redis:
     image: redis:7
-    container_name: digital-nepal-redis
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     ports:

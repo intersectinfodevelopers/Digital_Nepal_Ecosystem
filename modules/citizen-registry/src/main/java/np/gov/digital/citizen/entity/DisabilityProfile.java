@@ -34,15 +34,15 @@ public class DisabilityProfile {
 
     /** WHO ICF body function severity: 0-4 */
     @Column(name = "severity_body", nullable = false)
-    private Integer severityBody;
+    private Short severityBody;
 
     /** WHO ICF activity limitation severity: 0-4 */
     @Column(name = "severity_activity", nullable = false)
-    private Integer severityActivity;
+    private Short severityActivity;
 
     /** WHO ICF participation restriction severity: 0-4 */
     @Column(name = "severity_participation", nullable = false)
-    private Integer severityParticipation;
+    private Short severityParticipation;
 
     /** Certificate number — must be present for Disability ID card eligibility */
     @Column(name = "certificate_no", length = 100)
