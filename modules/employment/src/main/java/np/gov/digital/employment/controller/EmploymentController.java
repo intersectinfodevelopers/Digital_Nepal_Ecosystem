@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/employment")
+@RequestMapping("/v1/employment")
 public class EmploymentController {
 
     private final EmploymentService service;

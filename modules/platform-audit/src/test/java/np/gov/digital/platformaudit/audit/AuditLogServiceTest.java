@@ -41,11 +41,12 @@ class AuditLogServiceTest {
     @DisplayName("log — writes one row to audit_logs table")
     void log_writesOneRow() {
         UUID citizenId = UUID.randomUUID();
+        mockJwt(UUID.randomUUID().toString());
 
         auditLogService.log(AuditEventType.CITIZEN_REGISTERED, citizenId, "Citizen registered");
 
         verify(jdbcTemplate, times(1)).update(anyString(),
-                any(), any(), any(), any(), any());
+            any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -57,13 +58,14 @@ class AuditLogServiceTest {
         auditLogService.log(AuditEventType.CITIZEN_REGISTERED, "Test registration");
 
         verify(jdbcTemplate, times(1)).update(anyString(),
-                any(), any(), any(), any(), any());
+            any(), any(), any(), any(), any(), any());
     }
 
     @Test
     @DisplayName("log — NEVER throws even if DB fails")
     void log_neverThrowsOnDbFailure() {
-        when(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any()))
+        mockJwt(UUID.randomUUID().toString());
+        when(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any(), any()))
                 .thenThrow(new RuntimeException("DB connection lost"));
 
         assertDoesNotThrow(() ->
@@ -71,29 +73,34 @@ class AuditLogServiceTest {
     }
 
     @Test
-    @DisplayName("log — uses anonymous when no JWT present")
-    void log_usesAnonymousWithNoAuth() {
+    @DisplayName("log — skips anonymous events when no JWT is present")
+    void log_skipsAnonymousWithNoAuth() {
         assertDoesNotThrow(() ->
                 auditLogService.log(AuditEventType.FAILED_LOGIN, "No auth"));
+        verifyNoInteractions(jdbcTemplate);
     }
 
     @Test
     @DisplayName("log — FAILED_LOGIN event type resolves to AUTH entity")
     void log_failedLogin_resolvesToAuthEntity() {
+        mockJwt(UUID.randomUUID().toString());
         auditLogService.log(AuditEventType.FAILED_LOGIN, "Wrong password");
 
         verify(jdbcTemplate).update(anyString(),
-                any(), eq("FAILED_LOGIN"), eq("AUTH"), any(), any());
+            isNull(String.class), eq("FAILED_LOGIN"), anyString(), anyString(),
+            eq("WARD_ADMIN"), anyString());
     }
 
     @Test
     @DisplayName("log — CITIZEN_REGISTERED event resolves to CITIZEN entity")
     void log_citizenRegistered_resolvesToCitizenEntity() {
         UUID citizenId = UUID.randomUUID();
+        mockJwt(UUID.randomUUID().toString());
         auditLogService.log(AuditEventType.CITIZEN_REGISTERED, citizenId, "Registered");
 
         verify(jdbcTemplate).update(anyString(),
-                any(), eq("CITIZEN_REGISTERED"), eq("CITIZEN"), any(), any());
+            eq(citizenId.toString()), eq("CITIZEN_REGISTERED"), anyString(),
+            anyString(), eq("WARD_ADMIN"), anyString());
     }
 
     // ----------------------------------------------------------------
@@ -102,7 +109,8 @@ class AuditLogServiceTest {
         Jwt jwt = new Jwt("token", Instant.now(),
                 Instant.now().plusSeconds(3600),
                 Map.of("alg", "RS256"),
-                Map.of("sub", sub, "role", "WARD_ADMIN"));
+            Map.of("user_id", sub, "role", "WARD_ADMIN", "ward_id",
+                UUID.randomUUID().toString()));
         SecurityContextHolder.getContext()
                 .setAuthentication(new JwtAuthenticationToken(jwt));
     }

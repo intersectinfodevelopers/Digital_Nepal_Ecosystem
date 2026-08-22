@@ -43,7 +43,7 @@ CREATE INDEX idx_municipality_province ON municipality(province_id);
 CREATE TABLE IF NOT EXISTS ward (
     id                  UUID     PRIMARY KEY DEFAULT gen_random_uuid(),
     municipality_id     UUID     NOT NULL REFERENCES municipality(id),
-    ward_no             SMALLINT NOT NULL,
+    ward_no             INTEGER NOT NULL,
     name_np             VARCHAR(200) NOT NULL,
     name_en             VARCHAR(200) NOT NULL,
     population_estimate INTEGER,

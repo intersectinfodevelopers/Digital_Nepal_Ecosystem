@@ -1,4 +1,4 @@
-CREATE TABLE household (
+CREATE TABLE IF NOT EXISTS household (
                            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                            ward_id UUID NOT NULL REFERENCES ward(id),
 
@@ -30,7 +30,7 @@ CREATE TABLE household (
                            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE disability_profile (
+CREATE TABLE IF NOT EXISTS disability_profile (
                                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
                                     citizen_id UUID NOT NULL UNIQUE REFERENCES citizen(id),
@@ -56,7 +56,11 @@ CREATE TABLE disability_profile (
                                     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE sync_conflict_registry (
+ALTER TABLE disability_profile
+    ADD COLUMN IF NOT EXISTS caregiver_id UUID REFERENCES citizen(id),
+    ADD COLUMN IF NOT EXISTS device_provided_date DATE;
+
+CREATE TABLE IF NOT EXISTS sync_conflict_registry (
                                         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
                                         citizen_id UUID NOT NULL REFERENCES citizen(id),
@@ -74,7 +78,7 @@ CREATE TABLE sync_conflict_registry (
                                         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE employment_profile (
+CREATE TABLE IF NOT EXISTS employment_profile (
                                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
                                     citizen_id UUID NOT NULL UNIQUE REFERENCES citizen(id),
@@ -89,7 +93,7 @@ CREATE TABLE employment_profile (
                                     updated_by UUID NOT NULL REFERENCES users(id)
 );
 
-CREATE TABLE foreign_employment (
+CREATE TABLE IF NOT EXISTS foreign_employment (
                                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
                                     citizen_id UUID NOT NULL REFERENCES citizen(id),

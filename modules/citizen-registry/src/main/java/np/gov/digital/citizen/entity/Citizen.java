@@ -44,9 +44,17 @@ public class Citizen {
     @Column(name = "nid_enc")
     private String nidEnc;
 
-    // SHA-256 hash of the plaintext NID.
+    // DEPRECATED — plain SHA-256 hash of the plaintext NID, no pepper.
+    // Kept only during the V16 backfill transition. New code should read/
+    // write nidHmac instead.
+    @Deprecated
     @Column(name = "nid_hash", nullable = false, length = 64)
     private String nidHash;
+
+    // HMAC-SHA256(nid, pepper) — the correct dedup mechanism. Pepper lives
+    // only in Vault/env (NidEncryptionUtil), never in this column or table.
+    @Column(name = "nid_hmac", length = 64)
+    private String nidHmac;
 
     // AES-256/GCM encrypted citizenship certificate number.
     @Column(name = "citizenship_no_enc")

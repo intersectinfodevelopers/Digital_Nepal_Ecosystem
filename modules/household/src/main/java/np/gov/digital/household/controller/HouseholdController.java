@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/households")
+@RequestMapping("/v1/households")
 @RequiredArgsConstructor
 public class HouseholdController {
 

@@ -31,9 +31,34 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // FIX: these previously read "/api/v1/auth/login" etc.
+                        // Spring Security's requestMatchers operate on the path
+                        // AFTER server.servlet.context-path (/api) is stripped,
+                        // so the old value never actually matched the real
+                        // request path once this module is combined into the
+                        // bootstrap deployable — meaning /auth/login was
+                        // effectively NOT in the permitAll list, and depending
+                        // on filter order, either legitimately blocked login
+                        // entirely, or (worse) the mismatch meant anyRequest()
+                        // .authenticated() below was the only rule actually in
+                        // effect for these paths too. Paths here must match
+                        // the corrected @RequestMapping values exactly.
                         .requestMatchers(
-                                "/api/v1/auth/login",
-                                "/api/v1/auth/refresh"
+                                "/v1/auth/login",
+                                "/v1/auth/refresh"
+                        ).permitAll()
+                        // Public, unauthenticated per SDD Section 6.5/6.6 —
+                        // QR verification and grievance tracking are
+                        // deliberately reachable without a JWT.
+                        .requestMatchers(
+                                "/v1/idcards/verify/**",
+                                "/v1/grievances/track/**"
+                        ).permitAll()
+                        .requestMatchers(
+                                "/swagger-ui.html",
+                                "/swagger-ui/**",
+                                "/openapi.yaml",
+                                "/actuator/health"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
