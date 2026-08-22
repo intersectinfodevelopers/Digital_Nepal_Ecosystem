@@ -19,7 +19,7 @@ permissions:
 
 env:
     MAVEN_OPTS: -Dmaven.repo.local=$GITHUB_WORKSPACE/.m2/repository
-    IMAGE_NAME: ghcr.io/sachinshresthaa/digital-nepal-backend
+    IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/digital-nepal-backend
 
 jobs:
   build-backend:
