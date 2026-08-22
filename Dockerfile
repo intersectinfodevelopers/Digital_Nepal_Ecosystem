@@ -14,6 +14,7 @@ COPY .mvn .mvn
 COPY mvnw mvnw
 COPY pom.xml .
 COPY modules/ modules/
+COPY db/ db/
 
 # The bootstrap module is the canonical runnable Spring Boot application. It
 # includes every business module and the shared API documentation resources.
@@ -28,7 +29,7 @@ RUN ./mvnw -B -DskipTests clean package -pl modules/bootstrap -am
 
 # Target the explicitly named production binary—no wildcards, no guessing!
 RUN mkdir -p /build-output && \
-    cp modules/bootstrap/target/*.jar /build-output/app.jar
+    cp modules/bootstrap/target/digital-nepal-ecosystem.jar /build-output/app.jar
 
 # ============================================================================
 # STAGE 2: RUNTIME
