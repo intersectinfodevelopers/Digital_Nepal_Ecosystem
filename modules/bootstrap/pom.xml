@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>np.gov.digital</groupId>
+        <artifactId>digital-nepal-ecosystem</artifactId>
+        <version>1.0.0</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>bootstrap</artifactId>
+    <packaging>jar</packaging>
+    <name>Digital Nepal Ecosystem — Bootstrap</name>
+    <description>
+        THE MISSING PIECE: before this module existed, there was no runnable
+        application anywhere in this project except the standalone `auth`
+        service. Every other module (citizen-registry, platform-grievance,
+        platform-sync, platform-idcard, platform-audit, platform-gis,
+        household, employment) is a library JAR full of @RestController /
+        @Service / @Entity classes with no @SpringBootApplication main class
+        to boot them, and the root pom.xml is packaging=pom (an aggregator
+        only — it cannot itself run).
+
+        This module depends on every business module, provides the single
+        @SpringBootApplication entry point, and owns the one shared
+        application.yml (moved here from the root, which was never actually
+        loaded by anything). This matches the SDD's stated architecture: "a
+        monolithic Spring Boot 3 application with a clearly separated
+        service layer, designed for microservice extraction when scale
+        demands it" (Section 1.3) — ONE deployable for now, not N
+        independently-running services.
+
+        The `auth` module's own standalone AuthApplication.java /
+        application.yml / Flyway config are now redundant with this and
+        should be retired once the team confirms the monolith deployment
+        model — see BOOTSTRAP_NOTES.md.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Every business module, wired into one deployable. -->
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>auth-service</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>citizen-registry-service</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>household-service</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>employment-service</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>platform-audit</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>platform-gis</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>platform-grievance</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>platform-idcard</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>platform-sync</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>platform-disability</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>platform-eligibility</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>digital-nepal-ecosystem</finalName>
+        <resources>
+            <resource>
+                <directory>${project.basedir}/src/main/resources</directory>
+            </resource>
+            <resource>
+                <directory>${project.basedir}/../../db/migrations</directory>
+                <targetPath>db/migrations</targetPath>
+            </resource>
+        </resources>
+        <plugins>
+            <!-- Override the parent's global <skip>true</skip> — this is
+                 the one module that SHOULD be repackaged into a runnable
+                 executable jar. -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <skip>false</skip>
+                    <mainClass>np.gov.digital.DigitalNepalEcosystemApplication</mainClass>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

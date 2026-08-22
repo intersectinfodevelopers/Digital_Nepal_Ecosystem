@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -35,14 +36,16 @@ public class GrievanceService {
     @Transactional
     public GrievanceResponse fileGrievance(GrievanceFileRequest request) {
 
-        UUID filedBy      = getActorId();
-        String actorRole  = getActorRole();
+        UUID filedBy        = getActorId();
+        String actorRole    = getActorRole();
+        UUID municipalityId = getMunicipalityId(); // captured for escalation check
         String trackingCode = trackingCodeGenerator.generate();
-        Instant now       = Instant.now();
+        Instant now         = Instant.now();
 
         Grievance grievance = Grievance.builder()
                 .citizenId(request.getCitizenId())
                 .filedBy(filedBy)
+                .municipalityId(municipalityId)
                 .category(request.getCategory())
                 .description(request.getDescription())
                 .attachmentUrls(request.getAttachmentUrls())
@@ -58,7 +61,7 @@ public class GrievanceService {
 
         Grievance saved = grievanceRepository.save(grievance);
 
-        // Write first event log entry (Day 8 requirement)
+        // Write first event log entry
         grievanceEventRepository.save(GrievanceEvent.builder()
                 .grievanceId(saved.getId())
                 .citizenId(saved.getCitizenId())
@@ -74,7 +77,8 @@ public class GrievanceService {
         auditLogService.log(AuditEventType.GRIEVANCE_SUBMITTED, saved.getCitizenId(),
                 "trackingCode=" + trackingCode + " category=" + request.getCategory());
 
-        log.info("GrievanceService: filed {} for citizen={}", trackingCode, request.getCitizenId());
+        log.info("GrievanceService: filed {} for citizen={} municipality={}",
+                trackingCode, request.getCitizenId(), municipalityId);
 
         return GrievanceResponse.builder()
                 .id(saved.getId())
@@ -110,5 +114,19 @@ public class GrievanceService {
             log.warn("GrievanceService: could not extract role: {}", e.getMessage());
         }
         return "UNKNOWN";
+    }
+
+    private UUID getMunicipalityId() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getDetails() instanceof java.util.Map<?,?> details) {
+                Object mId = details.get("municipality_id");
+                if (mId != null) return UUID.fromString(mId.toString());
+            }
+        } catch (Exception e) {
+            log.warn("GrievanceService: could not extract municipality_id from JWT: {}",
+                    e.getMessage());
+        }
+        return null;
     }
 }

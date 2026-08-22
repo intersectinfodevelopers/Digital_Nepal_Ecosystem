@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/approvals")
+@RequestMapping("/v1/approvals")
 @RequiredArgsConstructor
 public class ApprovalController {
 

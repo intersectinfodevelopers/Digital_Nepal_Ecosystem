@@ -1,67 +1,18 @@
--- =============================================================================
--- 1. Geographic reference tables (ward hierarchy)
---    Needed by RLS subqueries. Coordinate with Amit — if V1 already has
---    these tables, drop the CREATE TABLE blocks below and keep only the seed.
--- =============================================================================
-
-CREATE TABLE IF NOT EXISTS auth.provinces (
-    id   UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(200) NOT NULL,
-    code SMALLINT    NOT NULL UNIQUE
-);
-
-CREATE TABLE IF NOT EXISTS auth.municipalities (
-    id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-    province_id UUID        NOT NULL REFERENCES auth.provinces(id),
-    name        VARCHAR(200) NOT NULL,
-    code        VARCHAR(50)
-);
-
-CREATE TABLE IF NOT EXISTS auth.wards (
-    id              UUID     PRIMARY KEY DEFAULT uuid_generate_v4(),
-    municipality_id UUID     NOT NULL REFERENCES auth.municipalities(id),
-    ward_no         SMALLINT NOT NULL,
-    name            VARCHAR(200),
-    UNIQUE (municipality_id, ward_no)
-);
-
--- ward_id column on citizens (add only if Amit has not added it in V1)
-DO $$ BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE  table_schema = 'citizen_registry'
-          AND  table_name   = 'citizens'
-          AND  column_name  = 'ward_id'
-    ) THEN
-        ALTER TABLE citizen_registry.citizens
-            ADD COLUMN ward_id UUID REFERENCES auth.wards(id);
-    END IF;
-END $$;
+-- V9__rls_policies_and_roles.sql
+-- REWRITTEN — see SCHEMA_RECONCILIATION_NOTES.md
+--
+-- Original version created a second, parallel copy of the province/
+-- municipality/ward hierarchy under auth.provinces / auth.municipalities /
+-- auth.wards, disconnected from the canonical public.province / .municipality
+-- / .ward tables created in V1__initial_schema.sql (which the JPA entities in
+-- the citizen-registry module actually map to). That meant RLS was being
+-- attached to tables the application never reads or writes.
+--
+-- This version attaches RLS directly to the real V1 tables. No new
+-- geographic tables are created here.
 
 -- =============================================================================
--- 2. Seed Kummayak data (safe to re-run — ON CONFLICT DO NOTHING)
--- =============================================================================
-
-INSERT INTO auth.provinces (id, name, code)
-VALUES ('00000000-0000-0000-0000-000000000001', 'Koshi Province', 1)
-ON CONFLICT DO NOTHING;
-
-INSERT INTO auth.municipalities (id, province_id, name, code)
-VALUES (
-    '00000000-0000-0000-0000-000000000010',
-    '00000000-0000-0000-0000-000000000001',
-    'Kummayak Rural Municipality',
-    'KUMMAYAK-001'
-) ON CONFLICT DO NOTHING;
-
--- 9 wards for Kummayak
-INSERT INTO auth.wards (municipality_id, ward_no, name)
-SELECT '00000000-0000-0000-0000-000000000010', s.n, 'Ward ' || s.n
-FROM   generate_series(1, 9) AS s(n)
-ON CONFLICT DO NOTHING;
-
--- =============================================================================
--- 3. Application roles — one per government tier
+-- 1. Application roles — one per government tier
 -- =============================================================================
 
 DO $$ BEGIN
@@ -89,69 +40,54 @@ DO $$ BEGIN
 END $$;
 
 -- =============================================================================
--- 4. Schema access
--- =============================================================================
-
-GRANT USAGE ON SCHEMA citizen_registry
-    TO ward_admin_role, local_body_role, province_role, central_role;
-
-GRANT USAGE ON SCHEMA auth
-    TO ward_admin_role, local_body_role, province_role, central_role;
-
-GRANT USAGE ON SCHEMA employment
-    TO ward_admin_role, local_body_role, province_role, central_role;
-
--- =============================================================================
--- 5. Table-level grants per tier
---    Ward + Local Body : full write
+-- 2. Table-level grants per tier (public schema — the canonical tables)
+--    Ward + Local Body : full write on citizen
 --    Province + Central: SELECT only — enforced at BOTH grant AND policy level
 -- =============================================================================
 
-GRANT SELECT, INSERT, UPDATE ON citizen_registry.citizens
+GRANT SELECT ON province, municipality, ward
+    TO ward_admin_role, local_body_role, province_role, central_role;
+
+GRANT SELECT, INSERT, UPDATE ON citizen
     TO ward_admin_role, local_body_role;
 
-GRANT SELECT ON citizen_registry.citizens
-    TO province_role, central_role;
-
-GRANT SELECT, INSERT, UPDATE ON employment.employment_records
-    TO ward_admin_role, local_body_role;
-
-GRANT SELECT ON employment.employment_records
+GRANT SELECT ON citizen
     TO province_role, central_role;
 
 -- =============================================================================
--- 6. Enable RLS on citizens table
+-- 3. Enable RLS on citizen table
 --    FORCE = even the table owner (app DB user) is filtered
 -- =============================================================================
 
-ALTER TABLE citizen_registry.citizens ENABLE  ROW LEVEL SECURITY;
-ALTER TABLE citizen_registry.citizens FORCE   ROW LEVEL SECURITY;
+ALTER TABLE citizen ENABLE  ROW LEVEL SECURITY;
+ALTER TABLE citizen FORCE   ROW LEVEL SECURITY;
 
 -- =============================================================================
--- 7. Drop old policies safely before recreating
+-- 4. Drop old policies safely before recreating
 -- =============================================================================
 
-DROP POLICY IF EXISTS ward_citizen_policy       ON citizen_registry.citizens;
-DROP POLICY IF EXISTS local_body_citizen_policy ON citizen_registry.citizens;
-DROP POLICY IF EXISTS province_citizen_policy   ON citizen_registry.citizens;
-DROP POLICY IF EXISTS central_citizen_policy    ON citizen_registry.citizens;
+DROP POLICY IF EXISTS ward_citizen_policy       ON citizen;
+DROP POLICY IF EXISTS local_body_citizen_policy ON citizen;
+DROP POLICY IF EXISTS province_citizen_policy   ON citizen;
+DROP POLICY IF EXISTS central_citizen_policy    ON citizen;
 
 -- =============================================================================
--- 8. THE 4 RLS POLICIES
+-- 5. THE 4 RLS POLICIES ON public.citizen
 --
---    Session variable        Set by Spring from JWT claim
---    app.current_ward_id          → ward_id  claim in JWT
---    app.current_municipality_id  → municipality_id claim
---    app.current_province_id      → province_id claim
+--    Session variable             Set by Spring from JWT claim (SET LOCAL
+--    app.current_ward_id          → ward_id claim in JWT                      only — never plain
+--    app.current_municipality_id  → municipality_id claim                     SET; see platform-
+--    app.current_province_id      → province_id claim                        audit's
+--                                                                              RlsSessionVariableSetter)
 --
 --    current_setting('var', true) — the "true" means:
 --      return NULL (not ERROR) if the variable is not set.
---      Without it, unauthenticated requests throw an exception.
+--      Without it, unauthenticated / non-scoped requests throw an exception.
 -- =============================================================================
 
 -- Policy 1 — Ward admin: own ward citizens only
 CREATE POLICY ward_citizen_policy
-    ON citizen_registry.citizens
+    ON citizen
     AS PERMISSIVE
     FOR ALL
     TO ward_admin_role
@@ -161,13 +97,13 @@ CREATE POLICY ward_citizen_policy
 
 -- Policy 2 — Local body admin: all wards inside their municipality
 CREATE POLICY local_body_citizen_policy
-    ON citizen_registry.citizens
+    ON citizen
     AS PERMISSIVE
     FOR ALL
     TO local_body_role
     USING (
         ward_id IN (
-            SELECT id FROM auth.wards
+            SELECT id FROM ward
             WHERE  municipality_id =
                    current_setting('app.current_municipality_id', true)::UUID
         )
@@ -175,15 +111,15 @@ CREATE POLICY local_body_citizen_policy
 
 -- Policy 3 — Province admin: SELECT only, all municipalities in their province
 CREATE POLICY province_citizen_policy
-    ON citizen_registry.citizens
+    ON citizen
     AS PERMISSIVE
     FOR SELECT
     TO province_role
     USING (
         ward_id IN (
             SELECT w.id
-            FROM   auth.wards        w
-            JOIN   auth.municipalities m ON w.municipality_id = m.id
+            FROM   ward         w
+            JOIN   municipality m ON w.municipality_id = m.id
             WHERE  m.province_id =
                    current_setting('app.current_province_id', true)::UUID
         )
@@ -191,18 +127,15 @@ CREATE POLICY province_citizen_policy
 
 -- Policy 4 — Central admin: SELECT only, all citizens nationwide (no filter)
 CREATE POLICY central_citizen_policy
-    ON citizen_registry.citizens
+    ON citizen
     AS PERMISSIVE
     FOR SELECT
     TO central_role
     USING (true);
 
 -- =============================================================================
--- 9. Protect audit_logs — append-only, no delete or update allowed
+-- Note: RLS for citizen_gis, edit_approval, sync_batch, sync_conflict_registry,
+-- and citizen_events is added in V18__extend_rls_policies.sql (these tables
+-- did not exist yet when V9 originally ran, and citizen_events is created
+-- fresh in V15__citizen_events_audit_log.sql).
 -- =============================================================================
-
-REVOKE UPDATE, DELETE ON reporting.audit_logs FROM PUBLIC;
--- Grant reference table access to all roles
-GRANT SELECT ON auth.wards TO ward_admin_role, local_body_role, province_role, central_role;
-GRANT SELECT ON auth.municipalities TO ward_admin_role, local_body_role, province_role, central_role;
-GRANT SELECT ON auth.provinces TO ward_admin_role, local_body_role, province_role, central_role;

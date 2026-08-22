@@ -25,6 +25,9 @@ public class CitizenEditRequest {
     private UUID citizenId;
 
     @Column(nullable = false)
+    private UUID wardId;
+
+    @Column(nullable = false)
     private UUID submittedBy;
 
     private UUID approvedBy;
@@ -33,7 +36,10 @@ public class CitizenEditRequest {
     @Column(nullable = false)
     private ApprovalStatus status;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "jsonb")
+    private String oldValueJson;
+
+    @Column(nullable = false, columnDefinition = "jsonb")
     private String changePayload;
 
     private String rejectionReason;
@@ -42,4 +48,6 @@ public class CitizenEditRequest {
     private LocalDateTime createdAt;
 
     private LocalDateTime approvedAt;
+
+    private LocalDateTime escalatedAt;
 }

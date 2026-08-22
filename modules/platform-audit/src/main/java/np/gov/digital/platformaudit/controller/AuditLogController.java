@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.UUID;
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/citizens")
+@RequestMapping("/v1/citizens")
 @RequiredArgsConstructor
 public class AuditLogController {
 

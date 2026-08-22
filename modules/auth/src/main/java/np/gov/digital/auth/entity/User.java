@@ -53,6 +53,18 @@ public class User {
 
     private LocalDateTime lockTime;
 
+    // Set TRUE when an account is created by an admin (see AdminController)
+    // with a system-generated temporary password. Login still succeeds with
+    // the temp password, but the client must be forced to the
+    // change-password flow before anything else — enforced in AuthService.
+    @Builder.Default
+    private Boolean passwordResetRequired = false;
+
+    // The account that created this one (Local Body Admin who created a
+    // Ward Admin, Central Admin who created a Province/Local Body Admin,
+    // etc.). Null only for the very first, manually-seeded Central Admin.
+    private UUID createdBy;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 

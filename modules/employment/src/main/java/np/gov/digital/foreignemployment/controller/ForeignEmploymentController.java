@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/foreign-employment")
+@RequestMapping("/v1/foreign-employment")
 @RequiredArgsConstructor
 public class ForeignEmploymentController {
 

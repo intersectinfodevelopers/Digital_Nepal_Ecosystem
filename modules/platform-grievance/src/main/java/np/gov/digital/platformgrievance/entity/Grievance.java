@@ -15,9 +15,10 @@ import java.util.UUID;
 @Table(
         name = "grievance",
         indexes = {
-                @Index(name = "idx_grievance_citizen",  columnList = "citizen_id"),
-                @Index(name = "idx_grievance_status",   columnList = "status"),
-                @Index(name = "idx_grievance_tracking", columnList = "tracking_code")
+                @Index(name = "idx_grievance_citizen",      columnList = "citizen_id"),
+                @Index(name = "idx_grievance_status",        columnList = "status"),
+                @Index(name = "idx_grievance_tracking",      columnList = "tracking_code"),
+                @Index(name = "idx_grievance_municipality",  columnList = "municipality_id")
         }
 )
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
@@ -33,6 +34,9 @@ public class Grievance {
 
     @Column(name = "filed_by")
     private UUID filedBy;
+
+    @Column(name = "municipality_id")
+    private UUID municipalityId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "category", nullable = false, length = 50)

@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/idcards")
+@RequestMapping("/v1/idcards")
 @RequiredArgsConstructor
 public class IdCardController {
 
