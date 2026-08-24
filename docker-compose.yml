@@ -42,7 +42,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: postgres
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
       JAVA_OPTS: "-Xmx512m -Xms256m"
     ports:
       - "${APP_PORT:-8080}:8080"
@@ -50,6 +50,8 @@ services:
       - ./keys:/opt/digital-nepal/keys:ro
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - digital-nepal-network
