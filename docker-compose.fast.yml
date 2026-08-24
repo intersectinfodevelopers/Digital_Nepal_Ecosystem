@@ -1,0 +1,36 @@
+services:
+  backend:
+    profiles: [ "full" ]
+  postgres:
+    image: postgres:16
+    ports:
+      - "${HOST_DB_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: digital_nepal
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - db_fast_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d digital_nepal"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_fast_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  db_fast_data:
+  redis_fast_data:
