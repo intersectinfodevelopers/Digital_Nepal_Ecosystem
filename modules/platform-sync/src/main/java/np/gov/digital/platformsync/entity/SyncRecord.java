@@ -4,6 +4,8 @@ import np.gov.digital.platformsync.enums.SyncRecordStatus;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -31,6 +33,7 @@ public class SyncRecord {
     @Column(name = "version_number", nullable = false)
     private Integer versionNumber;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "payload", columnDefinition = "jsonb", nullable = false)
     private String payload;
 
