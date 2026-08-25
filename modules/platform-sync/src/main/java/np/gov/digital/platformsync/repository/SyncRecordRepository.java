@@ -12,4 +12,5 @@ import java.util.UUID;
 public interface SyncRecordRepository extends JpaRepository<SyncRecord, UUID> {
 
     List<SyncRecord> findByStatus(SyncRecordStatus status);
+    List<SyncRecord> findByBatchId(UUID batchId);
 }

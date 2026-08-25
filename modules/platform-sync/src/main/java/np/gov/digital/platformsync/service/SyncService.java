@@ -129,19 +129,6 @@ public class SyncService {
 
 
             for (CitizenRecordDTO record : requestDTO.getRecords()) {
-                JobParameters parameters =
-                        new JobParametersBuilder()
-                                .addString(
-                                        "batchId",
-                                        batch.getBatchId().toString()
-                                )
-                                .addLong(
-                                        "time",
-                                        System.currentTimeMillis()
-                                )
-                                .toJobParameters();
-
-                jobLauncher.run(syncJob, parameters);
 
                 SyncRecord syncRecord = SyncRecord.builder()
                         .batchId(batch.getBatchId())
@@ -153,6 +140,8 @@ public class SyncService {
 
                 syncRecordRepository.save(syncRecord);
             }
+
+
 
 
             // ------------------------------------------------
