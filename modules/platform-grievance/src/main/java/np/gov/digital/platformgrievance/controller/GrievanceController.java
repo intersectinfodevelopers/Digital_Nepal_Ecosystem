@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import np.gov.digital.platformgrievance.dto.*;
+import np.gov.digital.platformgrievance.service.GrievanceDashboardService;
 import np.gov.digital.platformgrievance.service.GrievanceEscalationService;
 import np.gov.digital.platformgrievance.service.GrievanceService;
 import np.gov.digital.platformgrievance.service.GrievanceStateService;
@@ -23,13 +24,13 @@ public class GrievanceController {
     private final GrievanceService grievanceService;
     private final GrievanceStateService grievanceStateService;
     private final GrievanceEscalationService grievanceEscalationService;
+    private final GrievanceDashboardService grievanceDashboardService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('WARD_ADMIN','LOCAL_BODY_ADMIN')")
     public ResponseEntity<GrievanceResponse> file(
             @Valid @RequestBody GrievanceFileRequest request) {
-        log.info("POST /api/v1/grievances citizen={} category={}",
-                request.getCitizenId(), request.getCategory());
+        log.info("POST /v1/grievances citizen={}", request.getCitizenId());
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(grievanceService.fileGrievance(request));
@@ -40,7 +41,7 @@ public class GrievanceController {
     public ResponseEntity<GrievanceResponse> transition(
             @PathVariable UUID id,
             @Valid @RequestBody GrievanceTransitionRequest request) {
-        log.info("PATCH /api/v1/grievances/{}/status → {}", id, request.getTargetStatus());
+        log.info("PATCH /v1/grievances/{}/status → {}", id, request.getTargetStatus());
         return ResponseEntity.ok(grievanceStateService.transition(id, request));
     }
 
@@ -50,19 +51,26 @@ public class GrievanceController {
             @PathVariable UUID id,
             @Valid @RequestBody GrievanceEscalationRequest request,
             @RequestParam(required = false) String wardAdminMobile) {
-        log.info("POST /api/v1/grievances/{}/escalate municipality={}",
-                id, request.getMunicipalityId());
+        log.info("POST /v1/grievances/{}/escalate", id);
         return ResponseEntity.ok(
                 grievanceEscalationService.escalateToJudicial(id, request, wardAdminMobile));
     }
+
     @PostMapping("/{id}/reject")
     @PreAuthorize("hasAnyRole('WARD_ADMIN','LOCAL_BODY_ADMIN')")
     public ResponseEntity<GrievanceResponse> reject(
             @PathVariable UUID id,
             @Valid @RequestBody GrievanceRejectionRequest request,
             @RequestParam(required = false) String wardAdminMobile) {
-        log.info("POST /api/v1/grievances/{}/reject", id);
+        log.info("POST /v1/grievances/{}/reject", id);
         return ResponseEntity.ok(
                 grievanceEscalationService.closeInvalid(id, request, wardAdminMobile));
+    }
+    @GetMapping("/dashboard")
+    @PreAuthorize("hasRole('LOCAL_BODY_ADMIN')")
+    public ResponseEntity<GrievanceDashboardResponse> dashboard(
+            @RequestParam UUID municipalityId) {
+        log.info("GET /v1/grievances/dashboard municipality={}", municipalityId);
+        return ResponseEntity.ok(grievanceDashboardService.getDashboard(municipalityId));
     }
 }

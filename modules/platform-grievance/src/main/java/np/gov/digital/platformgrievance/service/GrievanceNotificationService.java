@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import np.gov.digital.platformidcard.service.SparrowSmsService;
 import org.springframework.stereotype.Service;
 
+import java.util.UUID;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -12,15 +14,6 @@ public class GrievanceNotificationService {
 
     private final SparrowSmsService sparrowSmsService;
 
-    /**
-     * Notifies the Ward Admin that their grievance has been escalated.
-     * SMS failure is caught and logged — never propagated.
-     *
-     * @param mobileNumber Ward Admin's phone number (decrypted before calling)
-     * @param trackingCode grievance tracking code e.g. GRV-2026-000123
-     * @param newStatus    the new status e.g. REFERRED_JUDICIAL
-     * @param reason       escalation reason
-     */
     public void notifyWardAdminOfEscalation(String mobileNumber,
                                             String trackingCode,
                                             String newStatus,
@@ -30,22 +23,13 @@ public class GrievanceNotificationService {
                     " has been escalated to " + formatStatus(newStatus) +
                     ". Reason: " + truncate(reason, 80) +
                     " - Kummayak Rural Municipality";
-
             sparrowSmsService.sendSms(mobileNumber, message);
-
-            log.info("GrievanceNotificationService: Ward Admin notified of escalation " +
-                    "trackingCode={} newStatus={}", trackingCode, newStatus);
-
+            log.info("Ward Admin notified of escalation trackingCode={}", trackingCode);
         } catch (Exception e) {
-            // SMS failure must never roll back escalation — log only
-            log.error("GrievanceNotificationService: notification failed for " +
-                    "trackingCode={} — {}", trackingCode, e.getMessage());
+            log.error("Escalation SMS failed for {} — {}", trackingCode, e.getMessage());
         }
     }
 
-    /**
-     * Notifies Ward Admin that their grievance was closed as invalid.
-     */
     public void notifyWardAdminOfRejection(String mobileNumber,
                                            String trackingCode,
                                            String reason) {
@@ -54,15 +38,44 @@ public class GrievanceNotificationService {
                     " has been closed as invalid. Reason: " +
                     truncate(reason, 80) +
                     " - Kummayak Rural Municipality";
-
             sparrowSmsService.sendSms(mobileNumber, message);
-
-            log.info("GrievanceNotificationService: Ward Admin notified of rejection " +
-                    "trackingCode={}", trackingCode);
-
+            log.info("Ward Admin notified of rejection trackingCode={}", trackingCode);
         } catch (Exception e) {
-            log.error("GrievanceNotificationService: rejection notification failed for " +
-                    "trackingCode={} — {}", trackingCode, e.getMessage());
+            log.error("Rejection SMS failed for {} — {}", trackingCode, e.getMessage());
+        }
+    }
+    public void notifyLocalBodyAdminOfSlaBreach(String trackingCode, UUID municipalityId) {
+        try {
+            // Structured in-app log — picked up by monitoring
+            log.warn("SLA_BREACH_NOTIFICATION trackingCode={} municipality={}",
+                    trackingCode, municipalityId);
+
+            // sparrowSmsService.sendSms(localBodyPhone, message);
+        } catch (Exception e) {
+            log.error("SLA breach notification failed for {} — {}",
+                    trackingCode, e.getMessage());
+        }
+    }
+
+
+    public void notifyGrievanceFiled(String mobileNumber, String trackingCode) {
+        try {
+            sparrowSmsService.sendGrievanceTrackingNumber(mobileNumber, trackingCode);
+            log.info("Grievance filed SMS sent trackingCode={}", trackingCode);
+        } catch (Exception e) {
+            log.error("Grievance filed SMS failed for {} — {}", trackingCode, e.getMessage());
+        }
+    }
+
+    public void notifyGrievanceResolved(String mobileNumber, String trackingCode) {
+        try {
+            String message = "Your grievance " + trackingCode +
+                    " has been resolved. " +
+                    "Track status at your ward office or call Kummayak Municipality.";
+            sparrowSmsService.sendSms(mobileNumber, message);
+            log.info("Grievance resolved SMS sent trackingCode={}", trackingCode);
+        } catch (Exception e) {
+            log.error("Grievance resolved SMS failed for {} — {}", trackingCode, e.getMessage());
         }
     }
 
