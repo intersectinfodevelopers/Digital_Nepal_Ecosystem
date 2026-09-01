@@ -16,4 +16,6 @@ public class GrievanceTransitionRequest {
 
     // Required when moving to RESOLVED_WARD or CLOSED_INVALID
     private String note;
+
+    private String citizenMobile;
 }

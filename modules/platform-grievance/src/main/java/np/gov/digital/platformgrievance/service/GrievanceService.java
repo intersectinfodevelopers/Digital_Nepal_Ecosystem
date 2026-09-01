@@ -32,13 +32,14 @@ public class GrievanceService {
     private final GrievanceEventRepository grievanceEventRepository;
     private final TrackingCodeGenerator trackingCodeGenerator;
     private final AuditLogService auditLogService;
+    private final GrievanceNotificationService notificationService;
 
     @Transactional
     public GrievanceResponse fileGrievance(GrievanceFileRequest request) {
 
         UUID filedBy        = getActorId();
         String actorRole    = getActorRole();
-        UUID municipalityId = getMunicipalityId(); // captured for escalation check
+        UUID municipalityId = getMunicipalityId();
         String trackingCode = trackingCodeGenerator.generate();
         Instant now         = Instant.now();
 
@@ -77,8 +78,12 @@ public class GrievanceService {
         auditLogService.log(AuditEventType.GRIEVANCE_SUBMITTED, saved.getCitizenId(),
                 "trackingCode=" + trackingCode + " category=" + request.getCategory());
 
-        log.info("GrievanceService: filed {} for citizen={} municipality={}",
-                trackingCode, request.getCitizenId(), municipalityId);
+        if (request.getCitizenMobile() != null && !request.getCitizenMobile().isBlank()) {
+            notificationService.notifyGrievanceFiled(
+                    request.getCitizenMobile(), trackingCode);
+        }
+
+        log.info("GrievanceService: filed {} for citizen={}", trackingCode, request.getCitizenId());
 
         return GrievanceResponse.builder()
                 .id(saved.getId())
@@ -95,9 +100,8 @@ public class GrievanceService {
     private UUID getActorId() {
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getName() != null) {
+            if (auth != null && auth.getName() != null)
                 return UUID.fromString(auth.getName());
-            }
         } catch (Exception e) {
             log.warn("GrievanceService: could not extract actor UUID: {}", e.getMessage());
         }
@@ -107,9 +111,8 @@ public class GrievanceService {
     private String getActorRole() {
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && !auth.getAuthorities().isEmpty()) {
+            if (auth != null && !auth.getAuthorities().isEmpty())
                 return auth.getAuthorities().iterator().next().getAuthority();
-            }
         } catch (Exception e) {
             log.warn("GrievanceService: could not extract role: {}", e.getMessage());
         }
@@ -124,8 +127,7 @@ public class GrievanceService {
                 if (mId != null) return UUID.fromString(mId.toString());
             }
         } catch (Exception e) {
-            log.warn("GrievanceService: could not extract municipality_id from JWT: {}",
-                    e.getMessage());
+            log.warn("GrievanceService: could not extract municipality_id: {}", e.getMessage());
         }
         return null;
     }

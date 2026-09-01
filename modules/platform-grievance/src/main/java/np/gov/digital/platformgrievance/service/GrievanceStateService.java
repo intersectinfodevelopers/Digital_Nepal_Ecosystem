@@ -29,6 +29,7 @@ public class GrievanceStateService {
     private final GrievanceRepository grievanceRepository;
     private final GrievanceEventRepository grievanceEventRepository;
     private final AuditLogService auditLogService;
+    private final GrievanceNotificationService notificationService;
 
     @Transactional
     public GrievanceResponse transition(UUID grievanceId,
@@ -41,18 +42,17 @@ public class GrievanceStateService {
         GrievanceStatus fromStatus = grievance.getStatus();
         GrievanceStatus toStatus   = request.getTargetStatus();
 
-        // STEP 1 — Validate: throws InvalidGrievanceTransitionException (422) if bad
+        // Validate via state machine — throws 422 on bad transition
         GrievanceStateMachine.validate(fromStatus, toStatus);
 
-        UUID actorId   = getActorId();
+        UUID actorId     = getActorId();
         String actorRole = getActorRole();
-        Instant now    = Instant.now();
+        Instant now      = Instant.now();
 
-        // STEP 2 — Apply transition
+        // Apply transition
         grievance.setStatus(toStatus);
         grievance.setUpdatedAt(now);
 
-        // Set resolution fields depending on the target state
         if (toStatus == GrievanceStatus.RESOLVED_WARD) {
             grievance.setResolutionWard(request.getNote());
             grievance.setResolutionWardAt(now);
@@ -66,7 +66,7 @@ public class GrievanceStateService {
 
         Grievance saved = grievanceRepository.save(grievance);
 
-        // STEP 3 — Append event log (mirrors citizen_events pattern)
+        // Append event log
         String eventType = resolveEventType(toStatus);
         grievanceEventRepository.save(GrievanceEvent.builder()
                 .grievanceId(saved.getId())
@@ -80,13 +80,23 @@ public class GrievanceStateService {
                 .createdAt(now)
                 .build());
 
-        // STEP 4 — Audit log
         auditLogService.log(AuditEventType.GRIEVANCE_RESOLVED, saved.getCitizenId(),
                 "Grievance " + grievance.getTrackingCode() +
                         " transitioned " + fromStatus + " → " + toStatus);
 
-        log.info("GrievanceStateService: {} transitioned {} → {} by actor={}",
-                grievance.getTrackingCode(), fromStatus, toStatus, actorId);
+        if (request.getCitizenMobile() != null && isResolvedState(toStatus)) {
+            try {
+                notificationService.notifyGrievanceResolved(
+                        request.getCitizenMobile(),
+                        saved.getTrackingCode());
+            } catch (Exception e) {
+                log.error("GrievanceStateService: resolved SMS failed for {} — {}",
+                        saved.getTrackingCode(), e.getMessage());
+            }
+        }
+
+        log.info("GrievanceStateService: {} transitioned {} → {}",
+                grievance.getTrackingCode(), fromStatus, toStatus);
 
         return GrievanceResponse.builder()
                 .id(saved.getId())
@@ -100,30 +110,34 @@ public class GrievanceStateService {
                 .build();
     }
 
-    /**
-     * Returns the event type string for the event log.
-     */
+    private boolean isResolvedState(GrievanceStatus status) {
+        return switch (status) {
+            case RESOLVED_WARD, RESOLVED_JUDICIAL,
+                 RESOLVED_BOARD, CLOSED -> true;
+            default -> false;
+        };
+    }
+
     private String resolveEventType(GrievanceStatus toStatus) {
         return switch (toStatus) {
-            case IN_PROGRESS      -> "GRIEVANCE_IN_PROGRESS";
-            case RESOLVED_WARD    -> "GRIEVANCE_RESOLVED_WARD";
-            case CLOSED_INVALID   -> "GRIEVANCE_CLOSED_INVALID";
-            case REFERRED_JUDICIAL-> "GRIEVANCE_REFERRED_JUDICIAL";
-            case RESOLVED_JUDICIAL-> "GRIEVANCE_RESOLVED_JUDICIAL";
-            case REFERRED_BOARD   -> "GRIEVANCE_REFERRED_BOARD";
-            case RESOLVED_BOARD   -> "GRIEVANCE_RESOLVED_BOARD";
-            case CLOSED           -> "GRIEVANCE_CLOSED";
-            case REOPENED         -> "GRIEVANCE_REOPENED";
-            default               -> "GRIEVANCE_STATUS_CHANGED";
+            case IN_PROGRESS       -> "GRIEVANCE_IN_PROGRESS";
+            case RESOLVED_WARD     -> "GRIEVANCE_RESOLVED_WARD";
+            case CLOSED_INVALID    -> "GRIEVANCE_CLOSED_INVALID";
+            case REFERRED_JUDICIAL -> "GRIEVANCE_REFERRED_JUDICIAL";
+            case RESOLVED_JUDICIAL -> "GRIEVANCE_RESOLVED_JUDICIAL";
+            case REFERRED_BOARD    -> "GRIEVANCE_REFERRED_BOARD";
+            case RESOLVED_BOARD    -> "GRIEVANCE_RESOLVED_BOARD";
+            case CLOSED            -> "GRIEVANCE_CLOSED";
+            case REOPENED          -> "GRIEVANCE_REOPENED";
+            default                -> "GRIEVANCE_STATUS_CHANGED";
         };
     }
 
     private UUID getActorId() {
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getName() != null) {
+            if (auth != null && auth.getName() != null)
                 return UUID.fromString(auth.getName());
-            }
         } catch (Exception e) {
             log.warn("GrievanceStateService: could not extract actor UUID: {}", e.getMessage());
         }
@@ -133,11 +147,10 @@ public class GrievanceStateService {
     private String getActorRole() {
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && !auth.getAuthorities().isEmpty()) {
+            if (auth != null && !auth.getAuthorities().isEmpty())
                 return auth.getAuthorities().iterator().next().getAuthority();
-            }
         } catch (Exception e) {
-            log.warn("GrievanceStateService: could not extract actor role: {}", e.getMessage());
+            log.warn("GrievanceStateService: could not extract role: {}", e.getMessage());
         }
         return "UNKNOWN";
     }

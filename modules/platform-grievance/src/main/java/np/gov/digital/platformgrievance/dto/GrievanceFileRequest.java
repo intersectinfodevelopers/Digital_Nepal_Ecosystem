@@ -23,8 +23,10 @@ public class GrievanceFileRequest {
     private GrievanceCategory category;
 
     @NotBlank(message = "description is required")
-    @Size(max = 4000, message = "description must not exceed 4000 characters")
+    @Size(max = 4000)
     private String description;
 
     private List<String> attachmentUrls;
+
+    private String citizenMobile;
 }
