@@ -1,5 +1,12 @@
 package np.gov.digital.platformidcard.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import np.gov.digital.platformidcard.dto.IdCardInitiateRequest;
@@ -16,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 @Slf4j
+@Tag(name = "ID Cards", description = "Disability ID card initiation, approval/PDF issuance, and QR verification")
 @RestController
 @RequestMapping("/v1/idcards")
 @RequiredArgsConstructor
@@ -25,6 +33,11 @@ public class IdCardController {
     private final QrCodeService      qrCodeService;
     private final SparrowSmsService  smsService;
 
+    @Operation(
+            summary = "Initiate an ID card request",
+            description = "Requires WARD_ADMIN or LOCAL_BODY_ADMIN role. Creates a request pending "
+                    + "LOCAL_BODY_ADMIN approval.")
+    @ApiResponse(responseCode = "201", description = "Initiation submitted, status PRINT_PENDING")
     @PostMapping("/initiate")
     @PreAuthorize("hasAnyRole('WARD_ADMIN', 'LOCAL_BODY_ADMIN')")
     public ResponseEntity<String> initiate(@RequestBody IdCardInitiateRequest request) {
@@ -41,9 +54,18 @@ public class IdCardController {
                         "Awaiting LOCAL_BODY_ADMIN approval.");
     }
 
+    @Operation(
+            summary = "Approve an ID card and generate the printable PDF",
+            description = "Requires LOCAL_BODY_ADMIN role. Generates the ID card PDF and SMS-notifies the citizen.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "PDF generated",
+                    content = @Content(mediaType = MediaType.APPLICATION_PDF_VALUE)),
+            @ApiResponse(responseCode = "500", description = "PDF generation failed")
+    })
     @PatchMapping("/{id}/approve")
     @PreAuthorize("hasRole('LOCAL_BODY_ADMIN')")
-    public ResponseEntity<byte[]> approve(@PathVariable("id") String id) {
+    public ResponseEntity<byte[]> approve(
+            @Parameter(description = "ID card request ID") @PathVariable("id") String id) {
         log.info("IdCardController: approving card id={}", id);
 
         try {
@@ -82,8 +104,14 @@ public class IdCardController {
         }
     }
 
+    @Operation(
+            summary = "Verify an ID card via its QR token",
+            description = "Public endpoint — no authentication required. Returns card validity and "
+                    + "type only; no citizen PII beyond name and ward.")
+    @SecurityRequirements
     @GetMapping("/verify/{token}")
-    public ResponseEntity<IdCardVerifyResponse> verify(@PathVariable("token") String token)  {
+    public ResponseEntity<IdCardVerifyResponse> verify(
+            @Parameter(description = "QR-encoded verification token") @PathVariable("token") String token)  {
         log.info("IdCardController: verifying QR token");
 
         QrCodeService.VerifyResult result = qrCodeService.verifyToken(token);
