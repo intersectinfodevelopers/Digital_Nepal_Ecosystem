@@ -8,6 +8,7 @@ import np.gov.digital.platformgrievance.service.GrievanceDashboardService;
 import np.gov.digital.platformgrievance.service.GrievanceEscalationService;
 import np.gov.digital.platformgrievance.service.GrievanceService;
 import np.gov.digital.platformgrievance.service.GrievanceStateService;
+import np.gov.digital.platformgrievance.service.GrievanceTrackingService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -25,6 +26,7 @@ public class GrievanceController {
     private final GrievanceStateService grievanceStateService;
     private final GrievanceEscalationService grievanceEscalationService;
     private final GrievanceDashboardService grievanceDashboardService;
+    private final GrievanceTrackingService grievanceTrackingService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('WARD_ADMIN','LOCAL_BODY_ADMIN')")
@@ -44,7 +46,6 @@ public class GrievanceController {
         log.info("PATCH /v1/grievances/{}/status → {}", id, request.getTargetStatus());
         return ResponseEntity.ok(grievanceStateService.transition(id, request));
     }
-
     @PostMapping("/{id}/escalate")
     @PreAuthorize("hasAnyRole('WARD_ADMIN','LOCAL_BODY_ADMIN')")
     public ResponseEntity<GrievanceResponse> escalate(
@@ -66,11 +67,19 @@ public class GrievanceController {
         return ResponseEntity.ok(
                 grievanceEscalationService.closeInvalid(id, request, wardAdminMobile));
     }
+
     @GetMapping("/dashboard")
     @PreAuthorize("hasRole('LOCAL_BODY_ADMIN')")
     public ResponseEntity<GrievanceDashboardResponse> dashboard(
             @RequestParam UUID municipalityId) {
         log.info("GET /v1/grievances/dashboard municipality={}", municipalityId);
         return ResponseEntity.ok(grievanceDashboardService.getDashboard(municipalityId));
+    }
+
+    @GetMapping("/track/{code}")
+    public ResponseEntity<GrievanceTrackingResponse> track(
+            @PathVariable String code) {
+        log.info("GET /v1/grievances/track/{}", code);
+        return ResponseEntity.ok(grievanceTrackingService.track(code));
     }
 }
