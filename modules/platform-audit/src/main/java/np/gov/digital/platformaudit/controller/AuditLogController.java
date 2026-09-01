@@ -1,5 +1,8 @@
 package np.gov.digital.platformaudit.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -11,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 @Slf4j
+@Tag(name = "Audit Log", description = "Citizen record audit trail")
 @RestController
 @RequestMapping("/v1/citizens")
 @RequiredArgsConstructor
@@ -23,12 +27,16 @@ public class AuditLogController {
      * @param page     page number (0-based, default 0)
      * @param size     page size (default 20, max 50)
      */
+    @Operation(
+            summary = "Get a citizen's audit log",
+            description = "Paginated, most-recent-first log of changes to a citizen record. "
+                    + "Requires LOCAL_BODY_ADMIN or CENTRAL_ADMIN role. Page size is capped at 50.")
     @GetMapping("/{id}/audit-log")
     @PreAuthorize("hasAnyRole('LOCAL_BODY_ADMIN', 'CENTRAL_ADMIN')")
     public ResponseEntity<Map<String, Object>> getAuditLog(
-            @PathVariable("id") UUID id,
-            @RequestParam(value = "page", defaultValue = "0")  int page,
-            @RequestParam(value = "size", defaultValue = "20") int size) {
+            @Parameter(description = "Citizen ID") @PathVariable("id") UUID id,
+            @Parameter(description = "Page number, 0-based") @RequestParam(value = "page", defaultValue = "0")  int page,
+            @Parameter(description = "Page size, capped at 50") @RequestParam(value = "size", defaultValue = "20") int size) {
 
         log.info("AuditLogController: audit-log requested for citizen={}", id);
 

@@ -43,6 +43,14 @@ services:
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      # WORKAROUND: flyway_schema_history is empty while the DB already has
+      # the fully-evolved schema (built up via ddl-auto: update over time),
+      # so Flyway tries to replay V1__initial_schema.sql from scratch and
+      # fails on column drift introduced by later migrations. Disabled here
+      # until the schema_history is properly reconciled/baselined — see
+      # db/migrations/SCHEMA_RECONCILIATION_NOTES.md. Remove this line once
+      # that's fixed so Flyway goes back to being the source of schema truth.
+      SPRING_FLYWAY_ENABLED: "false"
       JAVA_OPTS: "-Xmx512m -Xms256m"
     ports:
       - "${APP_PORT:-8080}:8080"
