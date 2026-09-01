@@ -1,5 +1,9 @@
 package np.gov.digital.platformgrievance.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @Slf4j
+@Tag(name = "Grievances", description = "Grievance filing, state transitions, and escalation")
 @RestController
 @RequestMapping("/v1/grievances")
 @RequiredArgsConstructor
@@ -24,6 +29,10 @@ public class GrievanceController {
     private final GrievanceStateService grievanceStateService;
     private final GrievanceEscalationService grievanceEscalationService;
 
+    @Operation(
+            summary = "File a grievance",
+            description = "Requires WARD_ADMIN or LOCAL_BODY_ADMIN role.")
+    @ApiResponse(responseCode = "201", description = "Grievance filed")
     @PostMapping
     @PreAuthorize("hasAnyRole('WARD_ADMIN','LOCAL_BODY_ADMIN')")
     public ResponseEntity<GrievanceResponse> file(
@@ -35,31 +44,43 @@ public class GrievanceController {
                 .body(grievanceService.fileGrievance(request));
     }
 
+    @Operation(
+            summary = "Transition a grievance's status",
+            description = "Advances a grievance through its state machine. Requires WARD_ADMIN or LOCAL_BODY_ADMIN role.")
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAnyRole('WARD_ADMIN','LOCAL_BODY_ADMIN')")
     public ResponseEntity<GrievanceResponse> transition(
-            @PathVariable UUID id,
+            @Parameter(description = "Grievance ID") @PathVariable UUID id,
             @Valid @RequestBody GrievanceTransitionRequest request) {
         log.info("PATCH /api/v1/grievances/{}/status → {}", id, request.getTargetStatus());
         return ResponseEntity.ok(grievanceStateService.transition(id, request));
     }
 
+    @Operation(
+            summary = "Escalate a grievance to judicial review",
+            description = "Requires WARD_ADMIN or LOCAL_BODY_ADMIN role. Optionally SMS-notifies the ward admin.")
     @PostMapping("/{id}/escalate")
     @PreAuthorize("hasAnyRole('WARD_ADMIN','LOCAL_BODY_ADMIN')")
     public ResponseEntity<GrievanceResponse> escalate(
-            @PathVariable UUID id,
+            @Parameter(description = "Grievance ID") @PathVariable UUID id,
             @Valid @RequestBody GrievanceEscalationRequest request,
+            @Parameter(description = "Ward admin mobile number to notify, optional")
             @RequestParam(required = false) String wardAdminMobile) {
         log.info("POST /api/v1/grievances/{}/escalate municipality={}",
                 id, request.getMunicipalityId());
         return ResponseEntity.ok(
                 grievanceEscalationService.escalateToJudicial(id, request, wardAdminMobile));
     }
+
+    @Operation(
+            summary = "Reject and close a grievance as invalid",
+            description = "Requires WARD_ADMIN or LOCAL_BODY_ADMIN role. Optionally SMS-notifies the ward admin.")
     @PostMapping("/{id}/reject")
     @PreAuthorize("hasAnyRole('WARD_ADMIN','LOCAL_BODY_ADMIN')")
     public ResponseEntity<GrievanceResponse> reject(
-            @PathVariable UUID id,
+            @Parameter(description = "Grievance ID") @PathVariable UUID id,
             @Valid @RequestBody GrievanceRejectionRequest request,
+            @Parameter(description = "Ward admin mobile number to notify, optional")
             @RequestParam(required = false) String wardAdminMobile) {
         log.info("POST /api/v1/grievances/{}/reject", id);
         return ResponseEntity.ok(

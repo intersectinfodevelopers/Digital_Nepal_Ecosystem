@@ -1,5 +1,9 @@
 package np.gov.digital.citizen.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+@Tag(name = "Citizen Registry", description = "Citizen registration and record management")
 @RestController
 @RequestMapping("/v1/citizens")
 @RequiredArgsConstructor
@@ -22,6 +27,14 @@ import java.util.Map;
 public class CitizenController {
     private final CitizenService citizenService;
 
+    @Operation(
+            summary = "Register a new citizen",
+            description = "Requires WARD_ADMIN or LOCAL_BODY_ADMIN role.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Citizen registered"),
+            @ApiResponse(responseCode = "404", description = "Ward does not exist"),
+            @ApiResponse(responseCode = "409", description = "A citizen with this NID is already registered")
+    })
     // POST /api/v1/citizens/register
     @PostMapping("/register")
     @PreAuthorize("hasAnyRole('WARD_ADMIN', 'LOCAL_BODY_ADMIN')")

@@ -1,5 +1,8 @@
 package np.gov.digital.platformsync.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import np.gov.digital.platformsync.dto.ConflictResolutionRequestDTO;
@@ -17,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
+@Tag(name = "Offline Sync", description = "Offline batch submission, sync status, and conflict resolution for ward-level devices")
 @RestController
 @RequestMapping("/v1/sync")
 @Validated
@@ -25,6 +29,9 @@ public class SyncController {
 
     private final SyncService syncService;
 
+    @Operation(
+            summary = "Submit an offline sync batch",
+            description = "Processes a batch of offline-recorded citizen changes submitted from a ward device.")
     @PostMapping("/submit")
     public ResponseEntity<SyncResponseDTO> submitSyncBatch(
             @Valid @RequestBody SyncBatchRequestDTO requestDTO) {
@@ -37,9 +44,10 @@ public class SyncController {
                 .body(response);
     }
 
+    @Operation(summary = "Get the processing status of a sync batch")
     @GetMapping("/batch/{id}/status")
     public ResponseEntity<SyncBatchStatusResponseDTO> getBatchStatus(
-            @PathVariable UUID id) {
+            @Parameter(description = "Sync batch ID") @PathVariable UUID id) {
 
         SyncBatchStatusResponseDTO response =
                 syncService.getBatchStatus(id);
@@ -47,9 +55,10 @@ public class SyncController {
         return ResponseEntity.ok(response);
     }
 
+    @Operation(summary = "Get the overall sync status for a ward")
     @GetMapping("/status/{wardId}")
     public ResponseEntity<WardSyncStatusResponseDTO> getWardSyncStatus(
-            @PathVariable UUID wardId) {
+            @Parameter(description = "Ward ID") @PathVariable UUID wardId) {
 
         WardSyncStatusResponseDTO response =
                 syncService.getWardSyncStatus(wardId);
@@ -57,9 +66,12 @@ public class SyncController {
         return ResponseEntity.ok(response);
     }
 
+    @Operation(
+            summary = "Resolve a sync conflict",
+            description = "Applies the chosen resolution to a detected sync conflict.")
     @PostMapping("/conflicts/{id}/resolve")
     public ResponseEntity<ConflictResponseDTO> resolveConflict(
-            @PathVariable UUID id,
+            @Parameter(description = "Conflict ID") @PathVariable UUID id,
             @Valid @RequestBody ConflictResolutionRequestDTO request) throws Exception {
 
         ConflictResponseDTO response =
@@ -68,10 +80,13 @@ public class SyncController {
         return ResponseEntity.ok(response);
     }
 
+    @Operation(
+            summary = "List sync conflicts",
+            description = "Optionally filter by ward and/or conflict status.")
     @GetMapping("/conflicts")
     public ResponseEntity<List<ConflictResponseDTO>> getConflicts(
-            @RequestParam(required = false) UUID wardId,
-            @RequestParam(required = false) String status) {
+            @Parameter(description = "Filter by ward ID, optional") @RequestParam(required = false) UUID wardId,
+            @Parameter(description = "Filter by conflict status, optional") @RequestParam(required = false) String status) {
 
         List<ConflictResponseDTO> conflicts =
                 syncService.getConflicts(wardId, status);

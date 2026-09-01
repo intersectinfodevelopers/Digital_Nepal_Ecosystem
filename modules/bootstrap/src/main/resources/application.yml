@@ -126,6 +126,20 @@ jwt:
   refresh-token-expiration: ${JWT_REFRESH_TOKEN_TTL_MS:2592000000}
 
 # ==========================================================================
+# SWAGGER / OPENAPI (springdoc) — served under server.servlet.context-path,
+# i.e. /api/swagger-ui.html and /api/v3/api-docs. Paths permitted without
+# auth in SecurityConfig; see OpenApiConfig for the JWT bearer scheme.
+# ==========================================================================
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+    disable-swagger-default-url: true
+
+# ==========================================================================
 # SERVER
 # ==========================================================================
 server:

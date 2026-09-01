@@ -54,10 +54,14 @@ public class SecurityConfig {
                                 "/v1/idcards/verify/**",
                                 "/v1/grievances/track/**"
                         ).permitAll()
+                        // springdoc-generated OpenAPI spec + Swagger UI —
+                        // paths here are matched AFTER context-path (/api)
+                        // is stripped, same as the auth paths above.
                         .requestMatchers(
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
-                                "/openapi.yaml",
+                                "/v3/api-docs",
+                                "/v3/api-docs/**",
                                 "/actuator/health"
                         ).permitAll()
                         .anyRequest().authenticated()
