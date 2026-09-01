@@ -32,6 +32,12 @@
             <artifactId>platform-idcard</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>platform-gis</artifactId>
+            <version>1.0.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
 </project>
