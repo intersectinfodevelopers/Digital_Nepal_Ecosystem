@@ -6,7 +6,8 @@
 |---|---------------------------------------------------------------------------------------------------------------------------------|
 | Date | 2026-09-03                                                                                                                      |
 | Run by | Amit Khatiwada                                                                                                                  |
-| Commit hash under test | _fill in (`git rev-parse HEAD`, after committing the `RefreshTokenService` fix)_                                                |
+| Commit hash under test |bc6267a5e5028088cd04dbb974a7f6b5e9252964
+_                                                |
 | Environment | Local `docker-compose.yml` (1 CPU / 1GB backend container, Postgres 16 + PostGIS, Redis 7) — see Section 2                      |
 | Raw results | `scripts/load-test/k6/results/registration-load-test-summary.json`, `scripts/load-test/k6/results/sync-burst-test-summary.json` |
 
