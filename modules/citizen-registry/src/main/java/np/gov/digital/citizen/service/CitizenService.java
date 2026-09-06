@@ -2,12 +2,15 @@ package np.gov.digital.citizen.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import np.gov.digital.citizen.dto.CitizenProfileResponse;
 import np.gov.digital.citizen.dto.CitizenRegistrationRequest;
 import np.gov.digital.citizen.dto.CitizenRegistrationResponse;
+import np.gov.digital.citizen.dto.CitizenSummaryResponse;
 import np.gov.digital.citizen.entity.Citizen;
 import np.gov.digital.citizen.entity.Ward;
 import np.gov.digital.citizen.enums.RelationType;
 import np.gov.digital.citizen.enums.SyncStatus;
+import np.gov.digital.citizen.exception.CitizenNotFoundException;
 import np.gov.digital.citizen.exception.DuplicateNidException;
 import np.gov.digital.citizen.exception.WardNotFoundException;
 import np.gov.digital.citizen.repository.CitizenRepository;
@@ -17,6 +20,8 @@ import np.gov.digital.platformaudit.audit.AuditEventType;
 import np.gov.digital.platformaudit.audit.AuditLogService;
 import np.gov.digital.platformgis.dto.GpsCaptureRequest;
 import np.gov.digital.platformgis.service.CitizenGisService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -24,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -158,8 +164,9 @@ public class CitizenService {
         // STEP 8 — Family tree linking
         // Build map of RelationType → normalized citizenship number from request
         Map<RelationType, String> familyMemberNos = buildFamilyMap(request);
-        if (!familyMemberNos.isEmpty()) {
-            familyLinkService.createFamilyLinks(saved, familyMemberNos);
+        List<String> childrenCitizenshipNos = normalizeChildrenCitizenshipNos(request);
+        if (!familyMemberNos.isEmpty() || !childrenCitizenshipNos.isEmpty()) {
+            familyLinkService.createFamilyLinks(saved, familyMemberNos, childrenCitizenshipNos);
         }
 
         // STEP 9 — Resolve any PENDING links waiting for this citizen
@@ -183,15 +190,125 @@ public class CitizenService {
                 .build();
     }
 
+    // READ — single profile, decrypted for an authorized viewer.
+    // Deliberately a separate DTO from CitizenRegistrationResponse, which is
+    // scoped to "just confirm the registration succeeded," not a full view.
+    @Transactional(readOnly = true)
+    public CitizenProfileResponse getProfile(UUID citizenId) {
+        Citizen citizen = citizenRepository.findById(citizenId)
+                .filter(Citizen::getIsActive)
+                .orElseThrow(() -> new CitizenNotFoundException(citizenId));
+
+        return CitizenProfileResponse.builder()
+                .citizenId(citizen.getId())
+                .wardId(citizen.getWard().getId())
+                .nameNp(citizen.getNameNp())
+                .nameEn(citizen.getNameEn())
+                .dob(nidEncryptionUtil.decrypt(citizen.getDobEnc()))
+                .sex(citizen.getSex())
+                .bloodGroup(citizen.getBloodGroup())
+                .religion(citizen.getReligion())
+                .ethnicity(citizen.getEthnicity())
+                .motherTongue(citizen.getMotherTongue())
+                .tole(citizen.getTole())
+                .citizenshipNoMasked(maskLast4(citizen.getCitizenshipNoNorm()))
+                .phone(citizen.getPhoneEnc() != null ? nidEncryptionUtil.decrypt(citizen.getPhoneEnc()) : null)
+                .phoneAlt(citizen.getPhoneAltEnc() != null ? nidEncryptionUtil.decrypt(citizen.getPhoneAltEnc()) : null)
+                .email(citizen.getEmailEnc() != null ? nidEncryptionUtil.decrypt(citizen.getEmailEnc()) : null)
+                .digitalLiteracy(citizen.getDigitalLiteracy())
+                .hasSmartphone(citizen.getHasSmartphone())
+                .photoUrl(citizen.getPhotoUrl())
+                .nidVerified(citizen.getNidVerified())
+                .isActive(citizen.getIsActive())
+                .syncStatus(citizen.getSyncStatus() != null ? citizen.getSyncStatus().name() : null)
+                .registrationChannel(citizen.getRegistrationChannel())
+                .registeredAt(citizen.getCreatedAt())
+                .build();
+    }
+
+    // READ — paginated list, scoped to one ward. RLS (Postgres session
+    // variables set per-request — see platform-audit's
+    // RlsSessionVariableSetterTest) is the actual enforcement boundary for
+    // "can this admin see this ward"; the wardId parameter here just picks
+    // which page of an already-scoped result set to return.
+    @Transactional(readOnly = true)
+    public Page<CitizenSummaryResponse> listByWard(UUID wardId, Pageable pageable) {
+        return citizenRepository.findByWardIdAndIsActiveTrue(wardId, pageable)
+                .map(this::toSummary);
+    }
+
+    // DELETE — soft deactivate. Never a hard delete: a citizen record is a
+    // legal artifact, not disposable state. Every existing read query
+    // already filters on isActive; this is the one place that writes it.
+    @Transactional
+    public void deactivate(UUID citizenId, String reason) {
+        Citizen citizen = citizenRepository.findById(citizenId)
+                .filter(Citizen::getIsActive)
+                .orElseThrow(() -> new CitizenNotFoundException(citizenId));
+
+        citizen.setIsActive(false);
+        citizenRepository.save(citizen);
+
+        auditLogService.log(
+                AuditEventType.CITIZEN_ARCHIVED,
+                citizenId,
+                reason != null && !reason.isBlank()
+                        ? "Citizen deactivated: " + reason
+                        : "Citizen deactivated"
+        );
+
+        log.info("Citizen deactivated — citizenId: {}", citizenId);
+    }
+
     // PRIVATE HELPERS
 
+    private CitizenSummaryResponse toSummary(Citizen citizen) {
+        return CitizenSummaryResponse.builder()
+                .citizenId(citizen.getId())
+                .nameNp(citizen.getNameNp())
+                .nameEn(citizen.getNameEn())
+                .wardId(citizen.getWard().getId())
+                .sex(citizen.getSex())
+                .nidVerified(citizen.getNidVerified())
+                .isActive(citizen.getIsActive())
+                .syncStatus(citizen.getSyncStatus() != null ? citizen.getSyncStatus().name() : null)
+                .registeredAt(citizen.getCreatedAt())
+                .build();
+    }
+
+    private String maskLast4(String value) {
+        if (value == null || value.isBlank()) return null;
+        if (value.length() <= 4) return value;
+        return "*".repeat(value.length() - 4) + value.substring(value.length() - 4);
+    }
+
     /**
-     * Builds family member map from registration request.
-     * Add more relation types here as the request DTO grows.
+     * Builds the father/mother/spouse map from the registration request.
+     * Citizenship numbers are normalized the same way as the citizen's own
+     * (see NidEncryptionUtil.normalizeCitizenshipNo) so lookups against
+     * citizenshipNoNorm match regardless of formatting differences between
+     * what the two family members each typed in.
      */
     private Map<RelationType, String> buildFamilyMap(CitizenRegistrationRequest request) {
         Map<RelationType, String> map = new HashMap<>();
+        putIfPresent(map, RelationType.FATHER, request.getFatherCitizenshipNo());
+        putIfPresent(map, RelationType.MOTHER, request.getMotherCitizenshipNo());
+        putIfPresent(map, RelationType.SPOUSE, request.getSpouseCitizenshipNo());
         return map;
+    }
+
+    private void putIfPresent(Map<RelationType, String> map, RelationType type, String rawCitizenshipNo) {
+        if (rawCitizenshipNo != null && !rawCitizenshipNo.isBlank()) {
+            map.put(type, nidEncryptionUtil.normalizeCitizenshipNo(rawCitizenshipNo));
+        }
+    }
+
+    private List<String> normalizeChildrenCitizenshipNos(CitizenRegistrationRequest request) {
+        if (request.getChildrenCitizenshipNos() == null) return List.of();
+        return request.getChildrenCitizenshipNos().stream()
+                .filter(no -> no != null && !no.isBlank())
+                .map(nidEncryptionUtil::normalizeCitizenshipNo)
+                .toList();
     }
 
     private UUID getActorId() {

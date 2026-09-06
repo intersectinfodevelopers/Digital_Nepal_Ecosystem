@@ -53,6 +53,7 @@
         <jackson.version>2.16.0</jackson.version>
         <apache-commons.version>3.13.0</apache-commons.version>
         <springdoc.version>2.3.0</springdoc.version>
+        <tess4j.version>5.19.0</tess4j.version>
     </properties>
 
     <!-- ================================================================ -->
@@ -76,6 +77,15 @@
                 <version>${spring-cloud.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+
+            <!-- OCR (Tesseract JNA wrapper) — version-managed here, but only
+                 pulled in by modules that actually need it (citizen-registry,
+                 for national-ID document scanning), not every module. -->
+            <dependency>
+                <groupId>net.sourceforge.tess4j</groupId>
+                <artifactId>tess4j</artifactId>
+                <version>${tess4j.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
