@@ -43,6 +43,14 @@
             <version>${project.version}</version>
             <scope>compile</scope>
         </dependency>
+
+        <!-- OCR for national-ID / citizenship-certificate document scanning
+             (NidDocumentScanService). Requires the native Tesseract binary
+             plus eng+nep trained data at runtime — see Dockerfile. -->
+        <dependency>
+            <groupId>net.sourceforge.tess4j</groupId>
+            <artifactId>tess4j</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

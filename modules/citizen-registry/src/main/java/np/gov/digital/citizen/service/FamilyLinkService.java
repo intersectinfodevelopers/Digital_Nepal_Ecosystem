@@ -32,58 +32,32 @@ public class FamilyLinkService {
     // CREATE FAMILY LINKS — called during registration
     @Transactional
     public void createFamilyLinks(Citizen citizen, Map<RelationType, String> familyMemberNos) {
-        if (familyMemberNos == null || familyMemberNos.isEmpty()) return;
+        createFamilyLinks(citizen, familyMemberNos, List.of());
+    }
 
-        for (Map.Entry<RelationType, String> entry : familyMemberNos.entrySet()) {
-            RelationType relationType = entry.getKey();
-            String relatedCitizenshipNoNorm = entry.getValue();
+    // CREATE FAMILY LINKS, including multiple children — a Map<RelationType, String>
+    // can only ever hold one CHILD entry, so children (0..n) are passed separately
+    // rather than forced into the same map as father/mother/spouse.
+    @Transactional
+    public void createFamilyLinks(
+            Citizen citizen,
+            Map<RelationType, String> familyMemberNos,
+            List<String> childrenCitizenshipNos) {
 
-            if (relatedCitizenshipNoNorm == null || relatedCitizenshipNoNorm.isBlank()) continue;
+        boolean hasSingular = familyMemberNos != null && !familyMemberNos.isEmpty();
+        boolean hasChildren = childrenCitizenshipNos != null && !childrenCitizenshipNos.isEmpty();
+        if (!hasSingular && !hasChildren) return;
 
-            // Prevent duplicate links
-            if (familyLinkRepository.existsByCitizenIdAndRelatedCitizenshipNo(
-                    citizen.getId(), relatedCitizenshipNoNorm)) {
-                log.debug("Family link already exists — skipping: {} → {}",
-                        citizen.getId(), relatedCitizenshipNoNorm);
-                continue;
+        if (hasSingular) {
+            for (Map.Entry<RelationType, String> entry : familyMemberNos.entrySet()) {
+                createSingleLink(citizen, entry.getKey(), entry.getValue());
             }
+        }
 
-            // Check if the related citizen is already registered
-            Optional<Citizen> relatedCitizen = citizenRepository
-                    .findByCitizenshipNoNormAndIsActiveTrue(relatedCitizenshipNoNorm);
-
-            FamilyLink link;
-
-            if (relatedCitizen.isPresent()) {
-                // Related citizen EXISTS — create LINKED immediately
-                link = FamilyLink.builder()
-                        .citizen(citizen)
-                        .relationType(relationType)
-                        .relatedCitizen(relatedCitizen.get())
-                        .relatedNameText(relatedCitizen.get().getNameNp())
-                        .relatedCitizenshipNo(relatedCitizenshipNoNorm)
-                        .linkStatus(LinkStatus.LINKED)
-                        .build();
-
-                log.info("Family link LINKED — citizen: {} → {} ({})",
-                        citizen.getId(), relatedCitizen.get().getId(), relationType);
-
-            } else {
-                // Related citizen NOT registered yet — create PENDING link
-                // Will be resolved when they register (resolvePendingLinks)
-                link = FamilyLink.builder()
-                        .citizen(citizen)
-                        .relationType(relationType)
-                        .relatedCitizen(null)
-                        .relatedCitizenshipNo(relatedCitizenshipNoNorm)
-                        .linkStatus(LinkStatus.PENDING)
-                        .build();
-
-                log.info("Family link PENDING — citizen: {} waiting for citizenshipNo: {} ({})",
-                        citizen.getId(), relatedCitizenshipNoNorm, relationType);
+        if (hasChildren) {
+            for (String childCitizenshipNo : childrenCitizenshipNos) {
+                createSingleLink(citizen, RelationType.CHILD, childCitizenshipNo);
             }
-
-            familyLinkRepository.save(link);
         }
 
         auditLogService.log(
@@ -91,6 +65,55 @@ public class FamilyLinkService {
                 citizen.getId(),
                 "Family links created during registration"
         );
+    }
+
+    private void createSingleLink(Citizen citizen, RelationType relationType, String relatedCitizenshipNoNorm) {
+        if (relatedCitizenshipNoNorm == null || relatedCitizenshipNoNorm.isBlank()) return;
+
+        // Prevent duplicate links
+        if (familyLinkRepository.existsByCitizenIdAndRelatedCitizenshipNo(
+                citizen.getId(), relatedCitizenshipNoNorm)) {
+            log.debug("Family link already exists — skipping: {} → {}",
+                    citizen.getId(), relatedCitizenshipNoNorm);
+            return;
+        }
+
+        // Check if the related citizen is already registered
+        Optional<Citizen> relatedCitizen = citizenRepository
+                .findByCitizenshipNoNormAndIsActiveTrue(relatedCitizenshipNoNorm);
+
+        FamilyLink link;
+
+        if (relatedCitizen.isPresent()) {
+            // Related citizen EXISTS — create LINKED immediately
+            link = FamilyLink.builder()
+                    .citizen(citizen)
+                    .relationType(relationType)
+                    .relatedCitizen(relatedCitizen.get())
+                    .relatedNameText(relatedCitizen.get().getNameNp())
+                    .relatedCitizenshipNo(relatedCitizenshipNoNorm)
+                    .linkStatus(LinkStatus.LINKED)
+                    .build();
+
+            log.info("Family link LINKED — citizen: {} → {} ({})",
+                    citizen.getId(), relatedCitizen.get().getId(), relationType);
+
+        } else {
+            // Related citizen NOT registered yet — create PENDING link
+            // Will be resolved when they register (resolvePendingLinks)
+            link = FamilyLink.builder()
+                    .citizen(citizen)
+                    .relationType(relationType)
+                    .relatedCitizen(null)
+                    .relatedCitizenshipNo(relatedCitizenshipNoNorm)
+                    .linkStatus(LinkStatus.PENDING)
+                    .build();
+
+            log.info("Family link PENDING — citizen: {} waiting for citizenshipNo: {} ({})",
+                    citizen.getId(), relatedCitizenshipNoNorm, relationType);
+        }
+
+        familyLinkRepository.save(link);
     }
 
     // RESOLVE PENDING LINKS — called when a new citizen registers

@@ -42,9 +42,14 @@ LABEL version="1.0"
 
 WORKDIR /opt/digital-nepal
 
-# Install curl for health checks
+# Install curl for health checks, plus Tesseract OCR (+ English and Nepali
+# trained data) for NidDocumentScanService's citizenship-certificate scanning.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl && \
+    apt-get install -y --no-install-recommends \
+        curl \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        tesseract-ocr-nep && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy compiled JAR from builder

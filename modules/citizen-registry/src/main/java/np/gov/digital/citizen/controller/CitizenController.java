@@ -1,23 +1,30 @@
 package np.gov.digital.citizen.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import np.gov.digital.citizen.dto.CitizenProfileResponse;
 import np.gov.digital.citizen.dto.CitizenRegistrationRequest;
 import np.gov.digital.citizen.dto.CitizenRegistrationResponse;
+import np.gov.digital.citizen.dto.CitizenSummaryResponse;
+import np.gov.digital.citizen.exception.CitizenNotFoundException;
 import np.gov.digital.citizen.exception.DuplicateNidException;
 import np.gov.digital.citizen.exception.WardNotFoundException;
 import np.gov.digital.citizen.service.CitizenService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.UUID;
 
 @Tag(name = "Citizen Registry", description = "Citizen registration and record management")
 @RestController
@@ -26,6 +33,50 @@ import java.util.Map;
 @Slf4j
 public class CitizenController {
     private final CitizenService citizenService;
+
+    @Operation(
+            summary = "List citizens in a ward",
+            description = "Paginated. Requires WARD_ADMIN or LOCAL_BODY_ADMIN role; row-level security "
+                    + "scopes results to the admin's geography regardless of the wardId passed here.")
+    @GetMapping
+    @PreAuthorize("hasAnyRole('WARD_ADMIN', 'LOCAL_BODY_ADMIN')")
+    public ResponseEntity<Page<CitizenSummaryResponse>> listByWard(
+            @Parameter(description = "Ward ID") @RequestParam UUID wardId,
+            Pageable pageable) {
+        return ResponseEntity.ok(citizenService.listByWard(wardId, pageable));
+    }
+
+    @Operation(
+            summary = "Get a citizen's profile",
+            description = "Requires WARD_ADMIN or LOCAL_BODY_ADMIN role. Decrypts DOB/phone/email for "
+                    + "display; citizenship number is returned masked, NID is never returned.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Profile returned"),
+            @ApiResponse(responseCode = "404", description = "No active citizen with this ID")
+    })
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('WARD_ADMIN', 'LOCAL_BODY_ADMIN')")
+    public ResponseEntity<CitizenProfileResponse> getProfile(
+            @Parameter(description = "Citizen ID") @PathVariable UUID id) {
+        return ResponseEntity.ok(citizenService.getProfile(id));
+    }
+
+    @Operation(
+            summary = "Deactivate a citizen record",
+            description = "Soft-delete only — sets isActive = false, never a hard delete. "
+                    + "Requires LOCAL_BODY_ADMIN role.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Deactivated"),
+            @ApiResponse(responseCode = "404", description = "No active citizen with this ID")
+    })
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('LOCAL_BODY_ADMIN')")
+    public ResponseEntity<Void> deactivate(
+            @Parameter(description = "Citizen ID") @PathVariable UUID id,
+            @Parameter(description = "Reason for deactivation, optional") @RequestParam(required = false) String reason) {
+        citizenService.deactivate(id, reason);
+        return ResponseEntity.noContent().build();
+    }
 
     @Operation(
             summary = "Register a new citizen",
@@ -62,6 +113,16 @@ public class CitizenController {
     public ResponseEntity<Map<String, String>> handleWardNotFound(WardNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
                 "error", "WARD_NOT_FOUND",
+                "message", ex.getMessage(),
+                "status", "404"
+        ));
+    }
+
+    // 404 Not Found — citizen does not exist or is deactivated.
+    @ExceptionHandler(CitizenNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleCitizenNotFound(CitizenNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+                "error", "CITIZEN_NOT_FOUND",
                 "message", ex.getMessage(),
                 "status", "404"
         ));
