@@ -7,6 +7,7 @@ import jakarta.validation.constraints.Size;
 import lombok.*;
 import np.gov.digital.citizen.enums.ConsentChannel;
 import np.gov.digital.citizen.enums.DigitalLiteracy;
+import java.util.List;
 import java.util.UUID;
 
 @Getter
@@ -74,4 +75,13 @@ public class CitizenRegistrationRequest {
     private String deviceId;
 
     private GpsDto gps;
+
+    // FAMILY LINKS — normalized citizenship numbers of relatives, resolved
+    // by CitizenService.buildFamilyMap() into FamilyLinkService links.
+    // A relative who isn't registered yet gets a PENDING link that resolves
+    // automatically once they register (see FamilyLinkService.resolvePendingLinks).
+    private String fatherCitizenshipNo;
+    private String motherCitizenshipNo;
+    private String spouseCitizenshipNo;
+    private List<String> childrenCitizenshipNos;
 }

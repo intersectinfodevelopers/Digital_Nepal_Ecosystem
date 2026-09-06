@@ -48,6 +48,17 @@
             <artifactId>flyway-core</artifactId>
         </dependency>
 
+        <!-- Needed so ApprovalService can load and patch the Citizen entity
+             when an edit request is approved — see ApprovalService.approve().
+             Matches the existing cross-module pattern already used by
+             citizen-registry itself (it calls into platform-audit and
+             platform-gis directly). -->
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>citizen-registry-service</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
     </dependencies>
 
     <build>

@@ -3,6 +3,7 @@ package np.gov.digital.auth.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import np.gov.digital.auth.dto.ApprovalRequest;
 import np.gov.digital.auth.dto.CitizenEditRequestDto;
@@ -23,11 +24,15 @@ public class ApprovalController {
 
     private final ApprovalService approvalService;
 
-    @Operation(summary = "Submit a citizen edit request for approval")
+    @Operation(
+            summary = "Submit a citizen edit request for approval",
+            description = "Only a fixed whitelist of low-risk fields (name, contact info, demographics) "
+                    + "can be submitted — NID, citizenship number, DOB, sex, and ward are not editable "
+                    + "this way.")
     @PostMapping
     public CitizenEditRequest submit(
             Authentication authentication,
-            @RequestBody CitizenEditRequestDto request) {
+            @Valid @RequestBody CitizenEditRequestDto request) {
 
         CustomUserDetails user =
                 (CustomUserDetails) authentication.getPrincipal();
