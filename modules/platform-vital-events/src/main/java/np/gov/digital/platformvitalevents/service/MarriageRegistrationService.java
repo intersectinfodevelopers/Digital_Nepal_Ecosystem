@@ -13,6 +13,8 @@ import np.gov.digital.citizen.repository.WardRepository;
 import np.gov.digital.citizen.service.CitizenService;
 import np.gov.digital.citizen.util.NidEncryptionUtil;
 import np.gov.digital.platformaudit.audit.AuthenticatedActor;
+import np.gov.digital.platformidcard.enums.DocumentType;
+import np.gov.digital.platformidcard.service.OfficialDocumentService;
 import np.gov.digital.platformvitalevents.dto.MarriageApprovalResponse;
 import np.gov.digital.platformvitalevents.dto.MarriageRegistrationRequest;
 import np.gov.digital.platformvitalevents.dto.MarriageRegistrationResponse;
@@ -67,6 +69,7 @@ public class MarriageRegistrationService {
     private final VitalEventService vitalEventService;
     private final CitizenService citizenService;
     private final NidEncryptionUtil nidEncryptionUtil;
+    private final OfficialDocumentService officialDocumentService;
 
     @Transactional
     public MarriageRegistrationResponse register(MarriageRegistrationRequest request) {
@@ -186,6 +189,15 @@ public class MarriageRegistrationService {
                 previousWard2, relocatedCitizenId != null && relocatedCitizenId.equals(spouse2.getId())
                         ? relocatedToWardId : previousWard2,
                 marriageRecord.getMarriageDate());
+
+        // Extended Modules §4.7 — one certificate per spouse, same as a
+        // real paper marriage certificate (each spouse holds their own
+        // copy referencing the same vital event). The event's own
+        // approval IS the authorization; no second review needed.
+        officialDocumentService.issueCertificateForVitalEvent(
+                DocumentType.MARRIAGE_CERTIFICATE, spouse1.getId(), vitalEventId, approverId);
+        officialDocumentService.issueCertificateForVitalEvent(
+                DocumentType.MARRIAGE_CERTIFICATE, spouse2.getId(), vitalEventId, approverId);
 
         log.info("Marriage event approved — vitalEventId: {}, spouse1: {}, spouse2: {}, relocated: {}",
                 vitalEventId, spouse1.getId(), spouse2.getId(), relocatedCitizenId);

@@ -11,6 +11,8 @@ import np.gov.digital.citizen.repository.CitizenRepository;
 import np.gov.digital.citizen.repository.WardRepository;
 import np.gov.digital.citizen.service.CitizenService;
 import np.gov.digital.platformaudit.audit.AuthenticatedActor;
+import np.gov.digital.platformidcard.enums.DocumentType;
+import np.gov.digital.platformidcard.service.OfficialDocumentService;
 import np.gov.digital.platformvitalevents.dto.DivorceRegistrationRequest;
 import np.gov.digital.platformvitalevents.dto.DivorceRegistrationResponse;
 import np.gov.digital.platformvitalevents.entity.DivorceRecord;
@@ -51,6 +53,7 @@ public class DivorceRegistrationService {
     private final CitizenRepository citizenRepository;
     private final VitalEventService vitalEventService;
     private final CitizenService citizenService;
+    private final OfficialDocumentService officialDocumentService;
 
     @Transactional
     public DivorceRegistrationResponse register(DivorceRegistrationRequest request) {
@@ -132,6 +135,13 @@ public class DivorceRegistrationService {
                 ward1, ward1, divorceRecord.getDivorceDate());
         recordMaritalStatusHistory(spouse2.getId(), vitalEventId, previousStatus2,
                 ward2, ward2, divorceRecord.getDivorceDate());
+
+        // Extended Modules §4.7 — one certificate per spouse, same
+        // pattern as marriage.
+        officialDocumentService.issueCertificateForVitalEvent(
+                DocumentType.DIVORCE_CERTIFICATE, spouse1.getId(), vitalEventId, approverId);
+        officialDocumentService.issueCertificateForVitalEvent(
+                DocumentType.DIVORCE_CERTIFICATE, spouse2.getId(), vitalEventId, approverId);
 
         log.info("Divorce event approved — vitalEventId: {}, spouse1: {}, spouse2: {}",
                 vitalEventId, spouse1.getId(), spouse2.getId());

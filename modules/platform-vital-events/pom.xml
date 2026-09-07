@@ -42,6 +42,13 @@
             <artifactId>household-service</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- Approving birth/death/marriage/divorce issues the matching
+             official_document certificate (Extended Modules §4.7). -->
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>platform-idcard</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
 </project>

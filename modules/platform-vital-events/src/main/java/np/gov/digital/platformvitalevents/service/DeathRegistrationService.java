@@ -17,6 +17,8 @@ import np.gov.digital.household.repository.HouseholdRepository;
 import np.gov.digital.platformaudit.audit.AuditEventType;
 import np.gov.digital.platformaudit.audit.AuditLogService;
 import np.gov.digital.platformaudit.audit.AuthenticatedActor;
+import np.gov.digital.platformidcard.enums.DocumentType;
+import np.gov.digital.platformidcard.service.OfficialDocumentService;
 import np.gov.digital.platformvitalevents.dto.DeathApprovalResponse;
 import np.gov.digital.platformvitalevents.dto.DeathRegistrationRequest;
 import np.gov.digital.platformvitalevents.dto.DeathRegistrationResponse;
@@ -82,6 +84,7 @@ public class DeathRegistrationService {
     private final EligibilityService eligibilityService;
     private final AuditLogService auditLogService;
     private final ObjectMapper objectMapper;
+    private final OfficialDocumentService officialDocumentService;
 
     @Transactional
     public DeathRegistrationResponse register(DeathRegistrationRequest request) {
@@ -180,6 +183,11 @@ public class DeathRegistrationService {
                             + "previous head deceased (vitalEventId: " + vitalEventId + ")"
             );
         }
+
+        // Extended Modules §4.7 — the vital event's own approval IS the
+        // authorization; a certificate doesn't need a second review.
+        officialDocumentService.issueCertificateForVitalEvent(
+                DocumentType.DEATH_CERTIFICATE, citizenId, vitalEventId, approverId);
 
         log.info("Death event approved — vitalEventId: {}, citizenId: {}, spouseReevaluated: {}, householdsFlagged: {}",
                 vitalEventId, citizenId, spouseReevaluated, householdsToFlag.size());

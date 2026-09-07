@@ -10,6 +10,8 @@ import np.gov.digital.citizen.repository.CitizenRepository;
 import np.gov.digital.citizen.repository.WardRepository;
 import np.gov.digital.citizen.service.CitizenService;
 import np.gov.digital.platformaudit.audit.AuthenticatedActor;
+import np.gov.digital.platformidcard.enums.DocumentType;
+import np.gov.digital.platformidcard.service.OfficialDocumentService;
 import np.gov.digital.platformvitalevents.dto.BirthRegistrationRequest;
 import np.gov.digital.platformvitalevents.dto.BirthRegistrationResponse;
 import np.gov.digital.platformvitalevents.entity.BirthRecord;
@@ -40,6 +42,7 @@ public class BirthRegistrationService {
     private final CitizenRepository citizenRepository;
     private final VitalEventService vitalEventService;
     private final CitizenService citizenService;
+    private final OfficialDocumentService officialDocumentService;
 
     @Transactional
     public BirthRegistrationResponse register(BirthRegistrationRequest request) {
@@ -154,6 +157,11 @@ public class BirthRegistrationService {
 
         birthRecord.setChildCitizen(child);
         birthRecordRepository.save(birthRecord);
+
+        // Extended Modules §4.7 — the vital event's own approval IS the
+        // authorization; a certificate doesn't need a second review.
+        officialDocumentService.issueCertificateForVitalEvent(
+                DocumentType.BIRTH_CERTIFICATE, child.getId(), vitalEventId, approverId);
 
         log.info("Birth event approved — vitalEventId: {}, new citizenId: {}", vitalEventId, child.getId());
         return child.getId();
