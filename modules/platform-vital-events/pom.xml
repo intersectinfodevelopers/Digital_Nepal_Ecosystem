@@ -35,6 +35,13 @@
             <artifactId>citizen-registry-service</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- Death approval's cascade flags any household this citizen was
+             head of for reassignment (Extended Modules §4.3). -->
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>household-service</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
 </project>

@@ -373,6 +373,39 @@ public class CitizenService {
         log.info("Citizen deactivated — citizenId: {}, status: {}", citizenId, voidStatus);
     }
 
+    // The DECEASED half of the comment above: called from
+    // platform-vital-events' DeathRegistrationService once a death event is
+    // APPROVED (SDD Extended Modules §4.3), never directly by an admin
+    // action — a death is established through the death_record/verbal
+    // autopsy workflow, not a generic status edit.
+    @Transactional
+    public void markDeceased(UUID citizenId, UUID actorId) {
+        Citizen citizen = citizenRepository.findById(citizenId)
+                .filter(Citizen::getIsActive)
+                .orElseThrow(() -> new CitizenNotFoundException(citizenId));
+
+        if (citizen.getStatus() == CitizenStatus.DECEASED) {
+            // Should already have been caught by DeathRegistrationService's
+            // own duplicate check before this is ever called — this is the
+            // final backstop against a race between two concurrent
+            // approvals for the same citizen.
+            throw new IllegalStateException("Citizen " + citizenId + " is already marked DECEASED.");
+        }
+
+        citizen.setStatus(CitizenStatus.DECEASED);
+        citizen.setArchivedAt(Instant.now());
+        citizen.setArchivedBy(actorId);
+        citizenRepository.save(citizen);
+
+        auditLogService.log(
+                AuditEventType.CITIZEN_ARCHIVED,
+                citizenId,
+                "Citizen marked DECEASED following an approved death registration"
+        );
+
+        log.info("Citizen marked DECEASED — citizenId: {}", citizenId);
+    }
+
     // PRIVATE HELPERS
 
     private CitizenSummaryResponse toSummary(Citizen citizen) {
