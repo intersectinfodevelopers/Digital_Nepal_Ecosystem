@@ -85,11 +85,15 @@ public class CitizenController {
 
     @Operation(
             summary = "Register a new citizen",
-            description = "Requires WARD_ADMIN or LOCAL_BODY_ADMIN role.")
+            description = "Requires WARD_ADMIN or LOCAL_BODY_ADMIN role. NID and citizenship number "
+                    + "are legally independent documents and are deduplicated independently — either "
+                    + "one already being registered blocks the request on its own.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Citizen registered"),
             @ApiResponse(responseCode = "404", description = "Ward does not exist"),
-            @ApiResponse(responseCode = "409", description = "A citizen with this NID is already registered")
+            @ApiResponse(responseCode = "409", description = "A citizen with this NID is already registered, "
+                    + "OR a citizen with this citizenship number is already registered — see the response "
+                    + "body's \"error\" field (DUPLICATE_NID / DUPLICATE_CITIZENSHIP) to tell them apart")
     })
     // POST /api/v1/citizens/register
     @PostMapping("/register")
