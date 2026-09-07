@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import np.gov.digital.auth.dto.CitizenEditRequestDto;
 import np.gov.digital.auth.entity.CitizenEditRequest;
 import np.gov.digital.auth.enums.ApprovalStatus;
+import np.gov.digital.auth.exception.SelfApprovalException;
 import np.gov.digital.auth.repository.CitizenEditRequestRepository;
 import np.gov.digital.citizen.entity.Citizen;
 import np.gov.digital.citizen.enums.DigitalLiteracy;
@@ -90,6 +91,15 @@ public class ApprovalService {
 
         CitizenEditRequest request = repository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found"));
+
+        // Backed by the no_self_approval CHECK constraint on
+        // citizen_edit_requests (V17) — checked here first for a clean
+        // error rather than a raw DataIntegrityViolationException; the DB
+        // constraint stays as the real guarantee regardless of this check.
+        if (approverId.equals(request.getSubmittedBy())) {
+            throw new SelfApprovalException(
+                    "Cannot approve an edit request you submitted yourself.");
+        }
 
         Citizen citizen = citizenRepository.findById(request.getCitizenId())
                 .orElseThrow(() -> new CitizenNotFoundException(request.getCitizenId()));

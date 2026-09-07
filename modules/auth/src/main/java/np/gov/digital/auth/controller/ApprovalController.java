@@ -9,12 +9,16 @@ import np.gov.digital.auth.dto.ApprovalRequest;
 import np.gov.digital.auth.dto.CitizenEditRequestDto;
 import np.gov.digital.auth.dto.RejectionRequest;
 import np.gov.digital.auth.entity.CitizenEditRequest;
+import np.gov.digital.auth.exception.SelfApprovalException;
 import np.gov.digital.auth.service.ApprovalService;
 import np.gov.digital.auth.security.CustomUserDetails;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @Tag(name = "Approvals", description = "Ward/local-body admin approval workflow for citizen edit requests")
 @RestController
@@ -42,7 +46,9 @@ public class ApprovalController {
                 request);
     }
 
-    @Operation(summary = "Approve a pending citizen edit request")
+    @Operation(
+            summary = "Approve a pending citizen edit request",
+            description = "An admin can never approve a request they submitted themselves.")
     @PostMapping("/{id}/approve")
     public CitizenEditRequest approve(
             @Parameter(description = "Edit request ID") @PathVariable java.util.UUID id,
@@ -75,5 +81,17 @@ public class ApprovalController {
     @GetMapping("/pending")
     public List<CitizenEditRequest> pending() {
         return approvalService.pendingRequests();
+    }
+
+    // 403 Forbidden — Governance Tiers §3: "Cannot approve a submission
+    // they personally submitted." Backed by the no_self_approval CHECK
+    // constraint (V17); this is just the clean error path in front of it.
+    @ExceptionHandler(SelfApprovalException.class)
+    public ResponseEntity<Map<String, String>> handleSelfApproval(SelfApprovalException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                "error", "SELF_APPROVAL_NOT_ALLOWED",
+                "message", ex.getMessage(),
+                "status", "403"
+        ));
     }
 }
