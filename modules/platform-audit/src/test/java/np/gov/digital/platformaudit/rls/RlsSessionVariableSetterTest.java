@@ -1,5 +1,6 @@
 package np.gov.digital.platformaudit.rls;
 
+import np.gov.digital.platformaudit.audit.AuthenticatedActor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -8,20 +9,24 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 import java.sql.Connection;
 import java.sql.Statement;
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.*;
 
+/**
+ * NOTE: previously authenticated via JwtAuthenticationToken — the type
+ * Spring's OAuth2 resource-server JWT decoder produces, which this app
+ * never actually uses. Rewritten to authenticate the way the app's real
+ * JwtAuthenticationFilter does: a plain UsernamePasswordAuthenticationToken
+ * wrapping an AuthenticatedActor principal.
+ */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 @DisplayName("RlsSessionVariableSetter")
@@ -46,7 +51,7 @@ class RlsSessionVariableSetterTest {
     @Test
     @DisplayName("Ward admin — sets ward_id only")
     void wardAdmin_setsWardIdOnly() throws Exception {
-        mockJwt("WARD_ADMIN", WARD_UUID, null, null);
+        mockActor("WARD_ADMIN", WARD_UUID, null, null);
         setter.setExplicit(connection, WARD_UUID, null, null);
         verify(statement).execute(contains("app.current_ward_id = '" + WARD_UUID));
         verify(statement, never()).execute(contains("app.current_municipality_id"));
@@ -56,7 +61,7 @@ class RlsSessionVariableSetterTest {
     @Test
     @DisplayName("Local body admin — sets municipality_id only")
     void localBodyAdmin_setsMunicipalityOnly() throws Exception {
-        mockJwt("LOCAL_BODY_ADMIN", null, MUNICIPALITY_UUID, null);
+        mockActor("LOCAL_BODY_ADMIN", null, MUNICIPALITY_UUID, null);
         setter.setExplicit(connection, null, MUNICIPALITY_UUID, null);
         verify(statement, never()).execute(contains("app.current_ward_id"));
         verify(statement).execute(contains("app.current_municipality_id = '" + MUNICIPALITY_UUID));
@@ -66,7 +71,7 @@ class RlsSessionVariableSetterTest {
     @Test
     @DisplayName("Province admin — sets province_id only")
     void provinceAdmin_setsProvinceOnly() throws Exception {
-        mockJwt("PROVINCE_ADMIN", null, null, PROVINCE_UUID);
+        mockActor("PROVINCE_ADMIN", null, null, PROVINCE_UUID);
         setter.setExplicit(connection, null, null, PROVINCE_UUID);
         verify(statement, never()).execute(contains("app.current_ward_id"));
         verify(statement, never()).execute(contains("app.current_municipality_id"));
@@ -76,7 +81,7 @@ class RlsSessionVariableSetterTest {
     @Test
     @DisplayName("Central admin — no SET LOCAL calls")
     void centralAdmin_noSetLocalCalls() throws Exception {
-        mockJwt("CENTRAL_ADMIN", null, null, null);
+        mockActor("CENTRAL_ADMIN", null, null, null);
         setter.setExplicit(connection, null, null, null);
         verify(statement, never()).execute(anyString());
     }
@@ -99,22 +104,26 @@ class RlsSessionVariableSetterTest {
         assertDoesNotThrow(() -> noAuthSetter.setFromSecurityContext(mockConn));
     }
 
+    @Test
+    @DisplayName("setFromSecurityContext — reads scope from AuthenticatedActor principal")
+    void setFromSecurityContext_readsFromActor() throws Exception {
+        mockActor("WARD_ADMIN", WARD_UUID, null, null);
+        setter.setFromSecurityContext(connection);
+        verify(statement).execute(contains("app.current_ward_id = '" + WARD_UUID));
+    }
+
     // ----------------------------------------------------------------
 
-    private void mockJwt(String role, String wardId,
+    private void mockActor(String role, String wardId,
                          String municipalityId, String provinceId) {
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("sub",  "test-user-uuid");
-        claims.put("role", role);
-        if (wardId         != null) claims.put("ward_id",         wardId);
-        if (municipalityId != null) claims.put("municipality_id", municipalityId);
-        if (provinceId     != null) claims.put("province_id",     provinceId);
-
-        Jwt jwt = new Jwt("token", Instant.now(),
-                Instant.now().plusSeconds(3600),
-                Map.of("alg", "RS256"), claims);
-
-        SecurityContextHolder.getContext()
-                .setAuthentication(new JwtAuthenticationToken(jwt));
+        AuthenticatedActor actor = new AuthenticatedActor() {
+            @Override public UUID getUserId() { return UUID.randomUUID(); }
+            @Override public String getRole() { return role; }
+            @Override public UUID getWardId() { return wardId != null ? UUID.fromString(wardId) : null; }
+            @Override public UUID getMunicipalityId() { return municipalityId != null ? UUID.fromString(municipalityId) : null; }
+            @Override public UUID getProvinceId() { return provinceId != null ? UUID.fromString(provinceId) : null; }
+        };
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(actor, null, java.util.List.of()));
     }
 }

@@ -1,16 +1,15 @@
 package np.gov.digital.platformaudit.filter;
 
+import np.gov.digital.platformaudit.audit.AuthenticatedActor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
-import java.time.Instant;
-import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -34,7 +33,7 @@ class RequirePermissionAspectTest {
     @Test
     @DisplayName("WARD_ADMIN has CITIZEN_WRITE permission")
     void wardAdmin_hasCitizenWrite() {
-        mockJwt("WARD_ADMIN");
+        mockActor("WARD_ADMIN");
         RequirePermissionAspect aspect = new RequirePermissionAspect();
 
         // WARD_ADMIN should have CITIZEN_WRITE — no exception thrown
@@ -73,6 +72,41 @@ class RequirePermissionAspectTest {
     }
 
     // ----------------------------------------------------------------
+    // Regression coverage for extractRole() itself: before the
+    // AuthenticatedActor fix, this method checked
+    // `auth instanceof JwtAuthenticationToken` — a type this app's real
+    // JwtAuthenticationFilter never produces — so it always returned
+    // "UNKNOWN" and every @RequirePermission-annotated call would have
+    // been denied. None of the tests above ever called extractRole()
+    // directly, so that bug shipped invisibly. These do.
+    // ----------------------------------------------------------------
+
+    @Test
+    @DisplayName("extractRole() reads the role off a real AuthenticatedActor principal")
+    void extractRole_readsFromAuthenticatedActor() throws Exception {
+        mockActor("LOCAL_BODY_ADMIN");
+        RequirePermissionAspect aspect = new RequirePermissionAspect();
+
+        String role = invokeExtractRole(aspect);
+
+        assertEquals("LOCAL_BODY_ADMIN", role);
+    }
+
+    @Test
+    @DisplayName("extractRole() returns UNKNOWN when no actor is authenticated")
+    void extractRole_returnsUnknownWithNoAuth() throws Exception {
+        RequirePermissionAspect aspect = new RequirePermissionAspect();
+
+        String role = invokeExtractRole(aspect);
+
+        assertEquals("UNKNOWN", role);
+    }
+
+    private String invokeExtractRole(RequirePermissionAspect aspect) throws Exception {
+        var method = RequirePermissionAspect.class.getDeclaredMethod("extractRole");
+        method.setAccessible(true);
+        return (String) method.invoke(aspect);
+    }
 
     /**
      * Simulates what RequirePermissionAspect does internally.
@@ -98,12 +132,15 @@ class RequirePermissionAspectTest {
         return ROLE_PERMISSIONS.getOrDefault(role, java.util.List.of()).contains(permission);
     }
 
-    private void mockJwt(String role) {
-        Jwt jwt = new Jwt("token", Instant.now(),
-                Instant.now().plusSeconds(3600),
-                Map.of("alg", "RS256"),
-                Map.of("sub", "test-user", "role", role));
-        SecurityContextHolder.getContext()
-                .setAuthentication(new JwtAuthenticationToken(jwt));
+    private void mockActor(String role) {
+        AuthenticatedActor actor = new AuthenticatedActor() {
+            @Override public UUID getUserId() { return UUID.randomUUID(); }
+            @Override public String getRole() { return role; }
+            @Override public UUID getWardId() { return null; }
+            @Override public UUID getMunicipalityId() { return null; }
+            @Override public UUID getProvinceId() { return null; }
+        };
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(actor, null, java.util.List.of()));
     }
 }

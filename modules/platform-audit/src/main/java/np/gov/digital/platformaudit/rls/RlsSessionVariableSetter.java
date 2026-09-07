@@ -1,27 +1,26 @@
 package np.gov.digital.platformaudit.rls;
 
 import lombok.extern.slf4j.Slf4j;
+import np.gov.digital.platformaudit.audit.AuthenticatedActor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Map;
 
 /**
  * RlsSessionVariableSetter
  *
- * Reads the current JWT from Spring SecurityContext and calls
- * SET LOCAL on the database connection so PostgreSQL RLS policies
+ * Reads the current authenticated actor from Spring SecurityContext and
+ * calls SET LOCAL on the database connection so PostgreSQL RLS policies
  * (V9 migration) know which ward / municipality / province this
  * request belongs to.
  *
  * Flow:
- *   JWT arrives  →  Spring parses it  →  this class reads claims
+ *   request arrives  →  JwtAuthenticationFilter authenticates it  →  this
+ *   class reads the AuthenticatedActor principal
  *   →  SET LOCAL app.current_ward_id = '<uuid>'
  *   →  PostgreSQL RLS filters citizen rows automatically
  *
@@ -32,6 +31,16 @@ import java.util.Map;
 @Slf4j
 @Component
 public class RlsSessionVariableSetter {
+    // BUG FIX: this used to check `auth instanceof JwtAuthenticationToken`
+    // — the type Spring's OAuth2 resource-server JWT decoder produces, not
+    // what this app's own custom JwtAuthenticationFilter actually puts in
+    // the SecurityContext. That check was always false, so this method was
+    // a silent no-op for every real request. It turns out to be dead code
+    // today (GeographicScopeFilter calls setExplicit(...) directly with
+    // actor-derived values instead), but it's public API another caller
+    // could reasonably wire up later and would fail closed exactly the
+    // same way — fixed for consistency with the other AuthenticatedActor
+    // call sites.
     public void setFromSecurityContext(Connection connection) throws SQLException {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 
@@ -40,18 +49,16 @@ public class RlsSessionVariableSetter {
             return;
         }
 
-        if (!(auth instanceof JwtAuthenticationToken jwtAuth)) {
-            log.debug("RLS: auth type {} is not JWT — skipping", auth.getClass().getSimpleName());
+        if (!(auth.getPrincipal() instanceof AuthenticatedActor actor)) {
+            log.debug("RLS: principal type {} is not an AuthenticatedActor — skipping",
+                    auth.getPrincipal() != null ? auth.getPrincipal().getClass().getSimpleName() : "null");
             return;
         }
 
-        Jwt jwt = jwtAuth.getToken();
-        Map<String, Object> claims = jwt.getClaims();
-
-        String wardId         = claimAsString(claims, "ward_id");
-        String municipalityId = claimAsString(claims, "municipality_id");
-        String provinceId     = claimAsString(claims, "province_id");
-        String role           = claimAsString(claims, "role");
+        String wardId         = uuidAsString(actor.getWardId());
+        String municipalityId = uuidAsString(actor.getMunicipalityId());
+        String provinceId     = uuidAsString(actor.getProvinceId());
+        String role           = actor.getRole();
 
         log.debug("RLS: role={} ward={} municipality={} province={}",
                 role, wardId, municipalityId, provinceId);
@@ -110,11 +117,8 @@ public class RlsSessionVariableSetter {
     // Private helpers
     // ----------------------------------------------------------------
 
-    private String claimAsString(Map<String, Object> claims, String key) {
-        Object val = claims.get(key);
-        if (val == null) return null;
-        String s = val.toString().trim();
-        return s.isEmpty() ? null : s;
+    private String uuidAsString(java.util.UUID id) {
+        return id != null ? id.toString() : null;
     }
 
     /**

@@ -20,6 +20,11 @@ public class CustomUserDetails implements UserDetails, AuthenticatedActor {
         return user.getId();
     }
 
+    @Override
+    public String getRole() {
+        return user.getRole().name();
+    }
+
     public UUID getWardId() {
         return user.getWardId();
     }
