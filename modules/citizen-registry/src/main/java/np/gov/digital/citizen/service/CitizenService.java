@@ -160,7 +160,21 @@ public class CitizenService {
                 .createdBy(actorId)
                 .build();
 
-        Citizen saved = citizenRepository.save(citizen);
+        // BUG FIX: was citizenRepository.save(citizen) — Citizen.id uses
+        // Hibernate's in-memory GenerationType.UUID, so saved.getId() is
+        // populated immediately, but the actual INSERT is deferred until
+        // the next flush (normally transaction commit). AuditLogService
+        // writes via a raw JdbcTemplate statement on the same connection/
+        // transaction, executing immediately — so it always ran before the
+        // citizen row physically existed in the DB, and citizen_events'
+        // FK on citizen_id always failed. That failure was invisible until
+        // now: before the AuthenticatedActor fix, AuditLogService's actor/
+        // jurisdiction extraction always returned null and the method
+        // returned before ever reaching the DB (see its class Javadoc) —
+        // so citizen registration itself never surfaced this ordering bug.
+        // saveAndFlush forces the INSERT to happen synchronously, so the
+        // FK reference below is valid.
+        Citizen saved = citizenRepository.saveAndFlush(citizen);
 
         // STEP 7 — Write audit log
         auditLogService.log(
