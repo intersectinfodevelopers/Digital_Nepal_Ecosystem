@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import np.gov.digital.platformaudit.audit.AuditEventType;
 import np.gov.digital.platformaudit.audit.AuditLogService;
+import np.gov.digital.platformaudit.audit.AuthenticatedActor;
 import np.gov.digital.platformgrievance.dto.GrievanceEscalationRequest;
 import np.gov.digital.platformgrievance.dto.GrievanceRejectionRequest;
 import np.gov.digital.platformgrievance.dto.GrievanceResponse;
@@ -182,10 +183,12 @@ public class GrievanceEscalationService {
     }
 
     private UUID getActorId() {
+        // BUG FIX: see AuthenticatedActor's javadoc (platform-audit) — was
+        // parsing Authentication.getName() (the username/email) as a UUID.
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getName() != null) {
-                return UUID.fromString(auth.getName());
+            if (auth != null && auth.getPrincipal() instanceof AuthenticatedActor actor) {
+                return actor.getUserId();
             }
         } catch (Exception e) {
             log.warn("GrievanceEscalationService: could not extract actor UUID: {}",
