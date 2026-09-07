@@ -406,6 +406,62 @@ public class CitizenService {
         log.info("Citizen marked DECEASED — citizenId: {}", citizenId);
     }
 
+    // Called from platform-vital-events' MarriageRegistrationService once
+    // a marriage event is APPROVED (SDD Extended Modules §4.4) — sets
+    // both spouses' maritalStatus and bidirectional spouseCitizenId link
+    // in one call per citizen (the caller invokes this once per spouse).
+    @Transactional
+    public void updateMaritalStatus(UUID citizenId, np.gov.digital.citizen.enums.MaritalStatus newStatus,
+                                     UUID spouseCitizenId, UUID actorId) {
+        Citizen citizen = citizenRepository.findById(citizenId)
+                .filter(Citizen::getIsActive)
+                .orElseThrow(() -> new CitizenNotFoundException(citizenId));
+
+        citizen.setMaritalStatus(newStatus);
+        citizen.setSpouseCitizenId(spouseCitizenId);
+        citizenRepository.save(citizen);
+
+        auditLogService.log(
+                AuditEventType.CITIZEN_UPDATED,
+                citizenId,
+                "Marital status changed to " + newStatus
+                        + (spouseCitizenId != null ? " (spouse: " + spouseCitizenId + ")" : "")
+        );
+
+        log.info("Marital status updated — citizenId: {}, newStatus: {}", citizenId, newStatus);
+    }
+
+    // Reassigns which ward a citizen belongs to. Deliberately a generic,
+    // low-level "just do it" operation with no policy of its own (e.g. no
+    // same-municipality restriction) — callers decide what transfers are
+    // allowed for their own workflow. MarriageRegistrationService (§4.4)
+    // only allows a same-municipality transfer as part of a marriage;
+    // migration_record (§4.6, not yet built) will be the place a genuine
+    // cross-municipality transfer goes through its own two-party Local
+    // Body Admin handoff before calling this.
+    @Transactional
+    public void transferWard(UUID citizenId, UUID newWardId, UUID actorId) {
+        Citizen citizen = citizenRepository.findById(citizenId)
+                .filter(Citizen::getIsActive)
+                .orElseThrow(() -> new CitizenNotFoundException(citizenId));
+
+        Ward newWard = wardRepository.findById(newWardId)
+                .orElseThrow(() -> new WardNotFoundException(newWardId));
+
+        UUID previousWardId = citizen.getWard().getId();
+        citizen.setWard(newWard);
+        citizenRepository.save(citizen);
+
+        auditLogService.log(
+                AuditEventType.CITIZEN_UPDATED,
+                citizenId,
+                "Ward transferred from " + previousWardId + " to " + newWardId
+        );
+
+        log.info("Citizen ward transferred — citizenId: {}, from: {}, to: {}",
+                citizenId, previousWardId, newWardId);
+    }
+
     // PRIVATE HELPERS
 
     private CitizenSummaryResponse toSummary(Citizen citizen) {
