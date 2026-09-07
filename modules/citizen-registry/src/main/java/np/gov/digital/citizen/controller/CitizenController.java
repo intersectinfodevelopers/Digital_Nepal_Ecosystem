@@ -12,6 +12,7 @@ import np.gov.digital.citizen.dto.CitizenProfileResponse;
 import np.gov.digital.citizen.dto.CitizenRegistrationRequest;
 import np.gov.digital.citizen.dto.CitizenRegistrationResponse;
 import np.gov.digital.citizen.dto.CitizenSummaryResponse;
+import np.gov.digital.citizen.enums.CitizenStatus;
 import np.gov.digital.citizen.exception.CitizenNotFoundException;
 import np.gov.digital.citizen.exception.DuplicateNidException;
 import np.gov.digital.citizen.exception.WardNotFoundException;
@@ -63,18 +64,21 @@ public class CitizenController {
 
     @Operation(
             summary = "Deactivate a citizen record",
-            description = "Soft-delete only — sets isActive = false, never a hard delete. "
-                    + "Requires LOCAL_BODY_ADMIN role.")
+            description = "Soft-delete only — never a hard delete. Requires LOCAL_BODY_ADMIN role. "
+                    + "voidStatus must be VOIDED_DUPLICATE or VOIDED_FRAUD; DECEASED and "
+                    + "RENOUNCED_CITIZENSHIP go through their own dedicated vital-event workflows, not this endpoint.")
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "Deactivated"),
+            @ApiResponse(responseCode = "400", description = "voidStatus was not VOIDED_DUPLICATE or VOIDED_FRAUD"),
             @ApiResponse(responseCode = "404", description = "No active citizen with this ID")
     })
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('LOCAL_BODY_ADMIN')")
     public ResponseEntity<Void> deactivate(
             @Parameter(description = "Citizen ID") @PathVariable UUID id,
+            @Parameter(description = "VOIDED_DUPLICATE or VOIDED_FRAUD") @RequestParam CitizenStatus voidStatus,
             @Parameter(description = "Reason for deactivation, optional") @RequestParam(required = false) String reason) {
-        citizenService.deactivate(id, reason);
+        citizenService.deactivate(id, voidStatus, reason);
         return ResponseEntity.noContent().build();
     }
 
@@ -125,6 +129,17 @@ public class CitizenController {
                 "error", "CITIZEN_NOT_FOUND",
                 "message", ex.getMessage(),
                 "status", "404"
+        ));
+    }
+
+    // 400 Bad Request — e.g. deactivate() called with a voidStatus outside
+    // the allowed VOIDED_DUPLICATE/VOIDED_FRAUD set.
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                "error", "INVALID_REQUEST",
+                "message", ex.getMessage(),
+                "status", "400"
         ));
     }
 }

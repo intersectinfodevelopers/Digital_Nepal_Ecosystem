@@ -8,6 +8,7 @@ import np.gov.digital.citizen.dto.CitizenRegistrationResponse;
 import np.gov.digital.citizen.dto.CitizenSummaryResponse;
 import np.gov.digital.citizen.entity.Citizen;
 import np.gov.digital.citizen.entity.Ward;
+import np.gov.digital.citizen.enums.CitizenStatus;
 import np.gov.digital.citizen.enums.RelationType;
 import np.gov.digital.citizen.enums.SyncStatus;
 import np.gov.digital.citizen.exception.CitizenNotFoundException;
@@ -129,7 +130,7 @@ public class CitizenService {
                 .registrationChannel(request.getRegistrationChannel())
                 .nidVerified(false)
                 .isAsyncVerified(false)
-                .isActive(true)
+                .status(CitizenStatus.ACTIVE)
                 .versionNumber(1)
                 .createdBy(actorId)
                 .build();
@@ -238,26 +239,42 @@ public class CitizenService {
     }
 
     // DELETE — soft deactivate. Never a hard delete: a citizen record is a
-    // legal artifact, not disposable state. Every existing read query
-    // already filters on isActive; this is the one place that writes it.
+    // legal artifact, not disposable state. isActive is now a database-
+    // generated column (see V27) driven by status, which is what this
+    // actually writes.
+    //
+    // Restricted to VOIDED_DUPLICATE/VOIDED_FRAUD: DECEASED and
+    // RENOUNCED_CITIZENSHIP are outcomes of their own dedicated workflows
+    // (the death-record cascade and a future renunciation flow — see
+    // Extended Modules §4.3), not a generic admin action. This endpoint is
+    // specifically for "this record shouldn't have existed / was voided,"
+    // not "this person's legal status changed."
     @Transactional
-    public void deactivate(UUID citizenId, String reason) {
+    public void deactivate(UUID citizenId, CitizenStatus voidStatus, String reason) {
+        if (voidStatus != CitizenStatus.VOIDED_DUPLICATE && voidStatus != CitizenStatus.VOIDED_FRAUD) {
+            throw new IllegalArgumentException(
+                    "Deactivation must be VOIDED_DUPLICATE or VOIDED_FRAUD — "
+                            + "DECEASED and RENOUNCED_CITIZENSHIP go through their own vital-event workflows, not this endpoint.");
+        }
+
         Citizen citizen = citizenRepository.findById(citizenId)
                 .filter(Citizen::getIsActive)
                 .orElseThrow(() -> new CitizenNotFoundException(citizenId));
 
-        citizen.setIsActive(false);
+        citizen.setStatus(voidStatus);
+        citizen.setArchivedAt(Instant.now());
+        citizen.setArchivedBy(getActorId());
         citizenRepository.save(citizen);
 
         auditLogService.log(
                 AuditEventType.CITIZEN_ARCHIVED,
                 citizenId,
                 reason != null && !reason.isBlank()
-                        ? "Citizen deactivated: " + reason
-                        : "Citizen deactivated"
+                        ? "Citizen deactivated (" + voidStatus + "): " + reason
+                        : "Citizen deactivated (" + voidStatus + ")"
         );
 
-        log.info("Citizen deactivated — citizenId: {}", citizenId);
+        log.info("Citizen deactivated — citizenId: {}, status: {}", citizenId, voidStatus);
     }
 
     // PRIVATE HELPERS
