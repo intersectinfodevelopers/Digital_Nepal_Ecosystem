@@ -1,6 +1,8 @@
 package np.gov.digital.platformsync.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -29,6 +31,16 @@ public class SyncConflictRegistry {
     @Column(name = "device_version", nullable = false)
     private Integer deviceVersion;
 
+    // BUG FIX: columnDefinition = "jsonb" alone doesn't tell Hibernate how
+    // to bind the parameter — a plain String still goes over the wire as
+    // VARCHAR, which Postgres rejects on every INSERT ("column is of type
+    // jsonb but expression is of type character varying"). Found live in
+    // an unrelated new JSONB column that copied this same pattern; see
+    // platform-sync's own SyncRecord.payload for the one place in this
+    // codebase that already had @JdbcTypeCode(SqlTypes.JSON) and didn't
+    // have the bug. This means recording a sync conflict has never worked
+    // against a real database.
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "conflicting_data", columnDefinition = "jsonb", nullable = false)
     private String conflictingData;
 

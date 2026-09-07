@@ -2,6 +2,8 @@ package np.gov.digital.citizen.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -35,7 +37,20 @@ public class EmploymentProfile {
     /**
      * Category-specific sub-fields stored as JSON string.
      * Example for UNEMPLOYED: {"duration_months": 6, "last_employer": "ABC Co"}
+     *
+     * BUG FIX: columnDefinition = "jsonb" alone doesn't tell Hibernate how
+     * to bind the parameter — a plain String still goes over the wire as
+     * VARCHAR, which Postgres rejects on every write ("column is of type
+     * jsonb but expression is of type character varying"). Currently
+     * nothing in this codebase writes to subFields yet, so this was
+     * dormant rather than actively broken — but it would have failed the
+     * moment anyone did. See the sibling np.gov.digital.employment.entity.
+     * EmploymentProfile (a separate class mapped to this same table) for
+     * where @JdbcTypeCode(SqlTypes.JSON) was already present, and
+     * platform-vital-events' VerbalAutopsyResponse for where this exact
+     * bug pattern was first reproduced live.
      */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "sub_fields", columnDefinition = "jsonb")
     private String subFields;
 
