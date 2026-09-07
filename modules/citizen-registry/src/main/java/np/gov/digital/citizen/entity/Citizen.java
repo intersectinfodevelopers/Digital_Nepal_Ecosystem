@@ -56,8 +56,13 @@ public class Citizen {
     // DEPRECATED — plain SHA-256 hash of the plaintext NID, no pepper.
     // Kept only during the V16 backfill transition. New code should read/
     // write nidHmac instead.
+    //
+    // Nullable since V33: a citizen registered via an approved birth
+    // event (registrationStage = BIRTH_REGISTERED) has no NID yet by
+    // design — this column being NOT NULL since V1 would otherwise make
+    // that impossible to insert at all.
     @Deprecated
-    @Column(name = "nid_hash", nullable = false, length = 64)
+    @Column(name = "nid_hash", length = 64)
     private String nidHash;
 
     // HMAC-SHA256(nid, pepper) — the correct dedup mechanism. Pepper lives
@@ -73,7 +78,10 @@ public class Citizen {
     // Alphanumeric-sanitized citizenship number (dashes and slashes stripped).
     // Internal-only — scoped to the family-link join, never returned by any
     // API. Duplicate detection uses citizenshipHmac instead (V28).
-    @Column(name = "citizenship_no_norm", nullable = false, length = 100)
+    //
+    // Nullable since V33 — same reason as nidHash above: a birth-registered
+    // citizen has no citizenship certificate yet either.
+    @Column(name = "citizenship_no_norm", length = 100)
     private String citizenshipNoNorm;
 
     // HMAC-SHA256(citizenshipNo, pepper) — independent dedup from nid_hmac;

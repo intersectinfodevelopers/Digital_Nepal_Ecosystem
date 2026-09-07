@@ -43,6 +43,15 @@ public enum AuditEventType {
     GRIEVANCE_SUBMITTED,
     GRIEVANCE_RESOLVED,
 
+    // Vital events (SDD Extended Modules §4) — shared across all five
+    // event types (birth/death/marriage/divorce/migration); the specific
+    // type is in the logged details, not a separate enum value per type,
+    // since the workflow itself is identical for all five.
+    VITAL_EVENT_SUBMITTED,
+    VITAL_EVENT_APPROVED,
+    VITAL_EVENT_REJECTED,
+    VITAL_EVENT_ESCALATED,
+
     //System
     DATA_EXPORT_ATTEMPTED,
     PERMISSION_DENIED

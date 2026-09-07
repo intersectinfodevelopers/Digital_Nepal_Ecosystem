@@ -230,6 +230,63 @@ public class CitizenService {
                 .build();
     }
 
+    // Creates the citizen record for a newborn once a birth_record's
+    // vital_event has been APPROVED (SDD Extended Modules §4.2).
+    // Deliberately NOT a call into registerCitizen() above — that method
+    // requires an NID and a citizenship number (@NotBlank on
+    // CitizenRegistrationRequest), neither of which a newborn has yet;
+    // citizen.nid_hash and citizen.citizenship_no_norm had to be relaxed
+    // to nullable (V33) specifically to allow this. Called from
+    // platform-vital-events' BirthRegistrationService, which owns the
+    // approval workflow itself — this method's only job is "given an
+    // approved birth's facts, create the resulting citizen."
+    @Transactional
+    public Citizen registerNewbornFromBirthEvent(
+            UUID wardId, String nameNp, String nameEn, String sex,
+            String dob, String birthRegistrationNo, UUID actorId) {
+
+        Ward ward = wardRepository.findById(wardId)
+                .orElseThrow(() -> new WardNotFoundException(wardId));
+
+        String dobEnc = nidEncryptionUtil.encrypt(dob);
+
+        Citizen citizen = Citizen.builder()
+                .ward(ward)
+                .nameNp(nameNp)
+                .nameEn(nameEn)
+                .dobEnc(dobEnc)
+                .sex(sex)
+                .consentRecordedAt(Instant.now())
+                .consentChannel(np.gov.digital.citizen.enums.ConsentChannel.WARD_OFFICE)
+                .syncStatus(SyncStatus.SYNCED)
+                .nidVerified(false)
+                .isAsyncVerified(false)
+                .hasSmartphone(false)
+                .status(CitizenStatus.ACTIVE)
+                .registrationStage(np.gov.digital.citizen.enums.RegistrationStage.BIRTH_REGISTERED)
+                .birthRegistrationNo(birthRegistrationNo)
+                .versionNumber(1)
+                .createdBy(actorId)
+                .build();
+
+        // saveAndFlush — see the identical comment on registerCitizen()
+        // above: the audit log write below is a raw JDBC statement on the
+        // same transaction and needs the citizen row to physically exist
+        // first.
+        Citizen saved = citizenRepository.saveAndFlush(citizen);
+
+        auditLogService.log(
+                AuditEventType.CITIZEN_REGISTERED,
+                saved.getId(),
+                "Citizen registered from approved birth record — ward: " + ward.getId()
+        );
+
+        log.info("Newborn citizen registered from birth event — citizenId: {}, wardId: {}",
+                saved.getId(), ward.getId());
+
+        return saved;
+    }
+
     // READ — single profile, decrypted for an authorized viewer.
     // Deliberately a separate DTO from CitizenRegistrationResponse, which is
     // scoped to "just confirm the registration succeeded," not a full view.
