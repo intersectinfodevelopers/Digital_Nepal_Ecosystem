@@ -14,6 +14,7 @@ import np.gov.digital.citizen.dto.CitizenRegistrationResponse;
 import np.gov.digital.citizen.dto.CitizenSummaryResponse;
 import np.gov.digital.citizen.enums.CitizenStatus;
 import np.gov.digital.citizen.exception.CitizenNotFoundException;
+import np.gov.digital.citizen.exception.DuplicateCitizenshipException;
 import np.gov.digital.citizen.exception.DuplicateNidException;
 import np.gov.digital.citizen.exception.WardNotFoundException;
 import np.gov.digital.citizen.service.CitizenService;
@@ -108,6 +109,18 @@ public class CitizenController {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
                 "error", "DUPLICATE_NID",
                 "message", "An active citizen is already registered with this NID",
+                "status", "409"
+        ));
+    }
+
+    // 409 Conflict — ERR_DUPLICATE_CITIZENSHIP (Ext. Modules §9). Citizenship
+    // number dedupes independently of NID.
+    @ExceptionHandler(DuplicateCitizenshipException.class)
+    public ResponseEntity<Map<String, String>> handleDuplicateCitizenship(DuplicateCitizenshipException ex) {
+        log.warn("Duplicate citizenship-number registration blocked");
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                "error", "DUPLICATE_CITIZENSHIP",
+                "message", "An active citizen is already registered with this citizenship number",
                 "status", "409"
         ));
     }

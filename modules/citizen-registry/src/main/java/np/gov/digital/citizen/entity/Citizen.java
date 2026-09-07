@@ -45,10 +45,13 @@ public class Citizen {
     @JoinColumn(name = "ward_id", nullable = false)
     private Ward ward;
 
-    // Identity - PII fields (encrypted at application layer)
-    // AES-256/GCM encrypted National ID number.
-    @Column(name = "nid_enc")
-    private String nidEnc;
+    // Identity - PII fields
+    // Reference into identity_vault (Extended Modules §2.3) — the citizen
+    // row never holds NID ciphertext directly. Resolve via
+    // IdentityVaultService, not by reading this column's target row
+    // yourself.
+    @Column(name = "nid_ref")
+    private UUID nidRef;
 
     // DEPRECATED — plain SHA-256 hash of the plaintext NID, no pepper.
     // Kept only during the V16 backfill transition. New code should read/
@@ -62,13 +65,21 @@ public class Citizen {
     @Column(name = "nid_hmac", length = 64)
     private String nidHmac;
 
-    // AES-256/GCM encrypted citizenship certificate number.
-    @Column(name = "citizenship_no_enc")
-    private String citizenshipNoEnc;
+    // Reference into identity_vault (Extended Modules §2.3) — same pattern
+    // as nidRef.
+    @Column(name = "citizenship_ref")
+    private UUID citizenshipRef;
 
     // Alphanumeric-sanitized citizenship number (dashes and slashes stripped).
+    // Internal-only — scoped to the family-link join, never returned by any
+    // API. Duplicate detection uses citizenshipHmac instead (V28).
     @Column(name = "citizenship_no_norm", nullable = false, length = 100)
     private String citizenshipNoNorm;
+
+    // HMAC-SHA256(citizenshipNo, pepper) — independent dedup from nid_hmac;
+    // either document can block a duplicate registration on its own.
+    @Column(name = "citizenship_hmac", length = 64)
+    private String citizenshipHmac;
 
     // AES-256/GCM encrypted passport number. Nullable — not all citizens have passports.
     @Column(name = "passport_no_enc")

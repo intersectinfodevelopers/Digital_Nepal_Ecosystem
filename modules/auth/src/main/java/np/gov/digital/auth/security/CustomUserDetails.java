@@ -2,6 +2,7 @@ package np.gov.digital.auth.security;
 
 import lombok.RequiredArgsConstructor;
 import np.gov.digital.auth.entity.User;
+import np.gov.digital.platformaudit.audit.AuthenticatedActor;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -11,7 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RequiredArgsConstructor
-public class CustomUserDetails implements UserDetails {
+public class CustomUserDetails implements UserDetails, AuthenticatedActor {
 
     private final User user;
 
