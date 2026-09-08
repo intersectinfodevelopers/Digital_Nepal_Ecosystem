@@ -72,6 +72,19 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/v1/evidence-exchange/requests/*/callback"
                         ).permitAll()
+                        // External Relying-Party Gateway (Extended Modules
+                        // §6.3-6.4) — a licensed external organization calling
+                        // verify()/consent has no citizen/admin JWT either;
+                        // authenticated instead by its own X-Client-Id/
+                        // X-Client-Secret headers, checked inside
+                        // GatewayVerificationService/GatewayConsentService.
+                        // The revoked-parties list is a deliberately public
+                        // transparency endpoint per the design doc, needing
+                        // no authentication at all.
+                        .requestMatchers(
+                                "/v1/gateway/**",
+                                "/v1/admin/relying-parties/revoked"
+                        ).permitAll()
                         // springdoc-generated OpenAPI spec + Swagger UI —
                         // paths here are matched AFTER context-path (/api)
                         // is stripped, same as the auth paths above.

@@ -120,6 +120,11 @@
         </dependency>
         <dependency>
             <groupId>np.gov.digital</groupId>
+            <artifactId>platform-gateway</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>np.gov.digital</groupId>
             <artifactId>platform-idcard</artifactId>
             <version>${project.version}</version>
         </dependency>
