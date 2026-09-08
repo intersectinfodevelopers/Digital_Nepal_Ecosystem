@@ -17,6 +17,7 @@ public enum AuditEventType {
 
     // Duplicate / verification
     DUPLICATE_NID_ATTEMPT,
+    DUPLICATE_CITIZENSHIP_ATTEMPT,
     NID_VERIFIED,
 
     // Authentication

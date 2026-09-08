@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import np.gov.digital.platformaudit.audit.AuditEventType;
 import np.gov.digital.platformaudit.audit.AuditLogService;
+import np.gov.digital.platformaudit.audit.AuthenticatedActor;
 import np.gov.digital.platformgrievance.dto.GrievanceFileRequest;
 import np.gov.digital.platformgrievance.dto.GrievanceResponse;
 import np.gov.digital.platformgrievance.entity.Grievance;
@@ -93,10 +94,15 @@ public class GrievanceService {
     }
 
     private UUID getActorId() {
+        // BUG FIX: Authentication.getName() returns the UserDetails
+        // username (email here), not a UUID — this always threw and fell
+        // back to the placeholder on every real request. See
+        // AuthenticatedActor's javadoc (platform-audit) for why this can't
+        // just import CustomUserDetails directly.
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getName() != null) {
-                return UUID.fromString(auth.getName());
+            if (auth != null && auth.getPrincipal() instanceof AuthenticatedActor actor) {
+                return actor.getUserId();
             }
         } catch (Exception e) {
             log.warn("GrievanceService: could not extract actor UUID: {}", e.getMessage());

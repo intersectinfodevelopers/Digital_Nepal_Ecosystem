@@ -6,12 +6,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import np.gov.digital.platformaudit.audit.AuthenticatedActor;
 import np.gov.digital.platformaudit.rls.RlsSessionVariableSetter;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -36,17 +35,21 @@ public class GeographicScopeFilter extends OncePerRequestFilter {
 
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 
-        // Only set RLS vars for authenticated JWT requests
-        if (auth instanceof JwtAuthenticationToken jwtAuth) {
-            Jwt jwt = jwtAuth.getToken();
-
-            String wardId         = getClaimString(jwt, "ward_id");
-            String municipalityId = getClaimString(jwt, "municipality_id");
-            String provinceId     = getClaimString(jwt, "province_id");
-            String role           = getClaimString(jwt, "role");
+        // BUG FIX: this used to check `auth instanceof JwtAuthenticationToken`
+        // — the type Spring's OAuth2 resource-server JWT decoder produces,
+        // not what this app's own custom JwtAuthenticationFilter actually
+        // puts in the SecurityContext (a plain UsernamePasswordAuthenticationToken
+        // wrapping CustomUserDetails). That check was always false for
+        // every real request, so RLS session variables have never actually
+        // been set — every RLS-protected query has been running with no
+        // scope applied at all, "safe fail" or not.
+        if (auth != null && auth.getPrincipal() instanceof AuthenticatedActor actor) {
+            String wardId         = uuidToString(actor.getWardId());
+            String municipalityId = uuidToString(actor.getMunicipalityId());
+            String provinceId     = uuidToString(actor.getProvinceId());
 
             log.debug("GeographicScopeFilter: role={} ward={} municipality={} province={}",
-                    role, wardId, municipalityId, provinceId);
+                    actor.getRole(), wardId, municipalityId, provinceId);
 
             // Get connection from pool and set RLS session variables
             try (Connection conn = dataSource.getConnection()) {
@@ -77,10 +80,7 @@ public class GeographicScopeFilter extends OncePerRequestFilter {
 
     // ----------------------------------------------------------------
 
-    private String getClaimString(Jwt jwt, String key) {
-        Object val = jwt.getClaims().get(key);
-        if (val == null) return null;
-        String s = val.toString().trim();
-        return s.isEmpty() ? null : s;
+    private String uuidToString(java.util.UUID id) {
+        return id != null ? id.toString() : null;
     }
 }

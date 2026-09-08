@@ -29,6 +29,8 @@ public interface CitizenRepository extends JpaRepository<Citizen, UUID> {
 
     Optional<Citizen> findByCitizenshipNoNormAndIsActiveTrue(String citizenshipNoNorm);
 
+    boolean existsByCitizenshipHmacAndIsActiveTrue(String citizenshipHmac);
+
     Page<Citizen> findByWardIdAndIsActiveTrue(UUID wardId, Pageable pageable);
 
     @Query("SELECT c FROM Citizen c WHERE c.ward.id = :wardId AND c.syncStatus = :status AND c.isActive = true")

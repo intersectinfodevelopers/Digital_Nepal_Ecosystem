@@ -5,8 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
@@ -86,27 +84,41 @@ public class AuditLogService {
         log(eventType, null, details);
     }
 
-    private UUID extractActorId() {
-        Jwt jwt = extractJwt();
-        if (jwt == null) return null;
-        Object userId = jwt.getClaims().get("user_id");
-        if (userId == null) return null;
+    // BUG FIX: these three used to check `auth instanceof JwtAuthenticationToken`
+    // — the type Spring's OAuth2 resource-server JWT decoder produces, not
+    // what this app's own custom JwtAuthenticationFilter actually puts in
+    // the SecurityContext (a plain UsernamePasswordAuthenticationToken
+    // wrapping CustomUserDetails). That check was always false for every
+    // real request, so extractActorId()/extractJurisdictionId() always
+    // returned null, the guard in log() always fired, and this entire
+    // audit trail has been silently writing nothing since it was pointed
+    // at citizen_events. AuthenticatedActor (this package) reads the real
+    // actor's identity and scope off the principal without a compile-time
+    // dependency on the auth module.
+    private AuthenticatedActor extractActor() {
         try {
-            return UUID.fromString(userId.toString());
-        } catch (IllegalArgumentException e) {
-            return null;
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getPrincipal() instanceof AuthenticatedActor actor) {
+                return actor;
+            }
+        } catch (Exception e) {
+            log.trace("AuditLogService: could not extract actor from security context: {}", e.getMessage());
         }
+        return null;
+    }
+
+    private UUID extractActorId() {
+        AuthenticatedActor actor = extractActor();
+        return actor != null ? actor.getUserId() : null;
     }
 
     private String extractActorRole() {
-        Jwt jwt = extractJwt();
-        if (jwt == null) return "SYSTEM";
-        Object role = jwt.getClaims().get("role");
-        return role != null ? role.toString() : "SYSTEM";
+        AuthenticatedActor actor = extractActor();
+        return actor != null ? actor.getRole() : "SYSTEM";
     }
 
     // Resolves whichever of ward_id / municipality_id / province_id is
-    // present on the actor's JWT — matches the "exactly one scope claim per
+    // present on the actor — matches the "exactly one scope claim per
     // role" design enforced at the DB level in V19's chk_users_single_jurisdiction.
     // CENTRAL_ADMIN has none of the three (national scope) — events they
     // trigger use a fixed nationwide sentinel jurisdiction id.
@@ -114,34 +126,14 @@ public class AuditLogService {
             UUID.fromString("00000000-0000-0000-0000-000000000000");
 
     private UUID extractJurisdictionId() {
-        Jwt jwt = extractJwt();
-        if (jwt == null) return null;
-        for (String claim : new String[] {"ward_id", "municipality_id", "province_id"}) {
-            Object value = jwt.getClaims().get(claim);
-            if (value != null) {
-                try {
-                    return UUID.fromString(value.toString());
-                } catch (IllegalArgumentException ignored) {
-                    // fall through to next claim
-                }
-            }
-        }
+        AuthenticatedActor actor = extractActor();
+        if (actor == null) return null;
+        if (actor.getWardId() != null) return actor.getWardId();
+        if (actor.getMunicipalityId() != null) return actor.getMunicipalityId();
+        if (actor.getProvinceId() != null) return actor.getProvinceId();
         // No scoped claim present — likely a CENTRAL_ADMIN (national scope).
-        String role = extractActorRole();
-        if ("CENTRAL_ADMIN".equals(role)) {
+        if ("CENTRAL_ADMIN".equals(actor.getRole())) {
             return NATIONAL_JURISDICTION_SENTINEL;
-        }
-        return null;
-    }
-
-    private Jwt extractJwt() {
-        try {
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth instanceof JwtAuthenticationToken jwtAuth) {
-                return jwtAuth.getToken();
-            }
-        } catch (Exception e) {
-            log.trace("AuditLogService: could not extract JWT from security context: {}", e.getMessage());
         }
         return null;
     }

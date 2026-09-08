@@ -1,0 +1,27 @@
+-- V30__fix_user_password_column_mismatch.sql
+--
+-- CRITICAL FIX: login has never worked, in any environment, for any user.
+--
+-- V19 added a `password` column to match the JPA `User` entity's field of
+-- the same name, "keeping the original SDD-aligned columns [password_hash]
+-- in place for anything that still reads them directly" — but nothing
+-- ever writes to `password`. There is no UserService, no User.builder()
+-- call, no .setPassword() call anywhere in this codebase; every user row
+-- that has ever existed was created with only password_hash populated
+-- (it's NOT NULL, per V1). Meanwhile CustomUserDetails.getPassword() —
+-- what Spring Security's BCryptPasswordEncoder actually compares against
+-- — reads User.password, which is always null. Confirmed by reproducing
+-- it: BCryptPasswordEncoder logs "Empty encoded password" and every login
+-- attempt fails regardless of credentials.
+--
+-- Fix: point the entity's `password` field at the column that's actually
+-- populated (password_hash is NOT NULL — guaranteed non-null for every
+-- existing row) and drop the always-empty `password` column. See the
+-- accompanying User.java change.
+--
+-- Building an actual user-provisioning path (a UserService that hashes
+-- and stores a new admin's password) is a separate, larger gap — nothing
+-- in this codebase creates users at all today, provisioning is entirely
+-- manual/out-of-band. Tracked separately, not fixed here.
+
+ALTER TABLE users DROP COLUMN password;

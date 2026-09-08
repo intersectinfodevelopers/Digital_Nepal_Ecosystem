@@ -28,7 +28,12 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
-    @Column(nullable = false)
+    // V30: this field used to map to a `password` column that nothing in
+    // the codebase ever wrote to (no UserService, no builder call anywhere
+    // sets it) — every login failed with "Empty encoded password" because
+    // CustomUserDetails.getPassword() read this field while the actual
+    // BCrypt hash sat in password_hash instead. Pointed at the real column.
+    @Column(name = "password_hash", nullable = false)
     private String password;
 
     @Enumerated(EnumType.STRING)
