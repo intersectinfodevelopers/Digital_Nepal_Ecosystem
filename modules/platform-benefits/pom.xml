@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>np.gov.digital</groupId>
+        <artifactId>digital-nepal-ecosystem</artifactId>
+        <version>1.0.0</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>platform-benefits</artifactId>
+    <packaging>jar</packaging>
+    <name>platform-benefits</name>
+    <description>Government-to-Person cash disbursement (Governance Tiers §8)</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+            <version>3.0.2</version>
+        </dependency>
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>platform-audit</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Citizen entity + EligibilityService — a disbursement is only
+             ever created for a citizen EligibilityService already found
+             eligible. -->
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>citizen-registry-service</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
+
+</project>

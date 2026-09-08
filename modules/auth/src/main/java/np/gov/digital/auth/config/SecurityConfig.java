@@ -54,6 +54,18 @@ public class SecurityConfig {
                                 "/v1/idcards/verify/**",
                                 "/v1/grievances/track/**"
                         ).permitAll()
+                        // External payment-rail settlement webhook
+                        // (Governance Tiers §8) — a real payment gateway
+                        // calling back has no citizen/admin JWT to present.
+                        // Authenticated instead by its own shared-secret
+                        // header, checked inside the controller (see
+                        // BenefitDisbursementController) — permitAll here
+                        // only gets it past Spring Security's own JWT
+                        // requirement, exactly the same reason
+                        // /v1/idcards/verify is here.
+                        .requestMatchers(
+                                "/v1/benefits/disburse/*/callback"
+                        ).permitAll()
                         // springdoc-generated OpenAPI spec + Swagger UI —
                         // paths here are matched AFTER context-path (/api)
                         // is stripped, same as the auth paths above.

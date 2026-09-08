@@ -52,6 +52,11 @@ public enum AuditEventType {
     VITAL_EVENT_REJECTED,
     VITAL_EVENT_ESCALATED,
 
+    // Government-to-Person payments (Governance Tiers §8)
+    BENEFIT_DISBURSEMENT_INITIATED,
+    BENEFIT_DISBURSEMENT_SETTLED,
+    BENEFIT_DISBURSEMENT_FAILED,
+
     //System
     DATA_EXPORT_ATTEMPTED,
     PERMISSION_DENIED
