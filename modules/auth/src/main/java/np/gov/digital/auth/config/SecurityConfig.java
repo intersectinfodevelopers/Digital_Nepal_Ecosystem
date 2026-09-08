@@ -54,6 +54,37 @@ public class SecurityConfig {
                                 "/v1/idcards/verify/**",
                                 "/v1/grievances/track/**"
                         ).permitAll()
+                        // External payment-rail settlement webhook
+                        // (Governance Tiers §8) — a real payment gateway
+                        // calling back has no citizen/admin JWT to present.
+                        // Authenticated instead by its own shared-secret
+                        // header, checked inside the controller (see
+                        // BenefitDisbursementController) — permitAll here
+                        // only gets it past Spring Security's own JWT
+                        // requirement, exactly the same reason
+                        // /v1/idcards/verify is here.
+                        .requestMatchers(
+                                "/v1/benefits/disburse/*/callback"
+                        ).permitAll()
+                        // Same reasoning as the benefits callback above —
+                        // a real DAO/NIDMC/Election Commission response
+                        // handler has no citizen/admin JWT to present.
+                        .requestMatchers(
+                                "/v1/evidence-exchange/requests/*/callback"
+                        ).permitAll()
+                        // External Relying-Party Gateway (Extended Modules
+                        // §6.3-6.4) — a licensed external organization calling
+                        // verify()/consent has no citizen/admin JWT either;
+                        // authenticated instead by its own X-Client-Id/
+                        // X-Client-Secret headers, checked inside
+                        // GatewayVerificationService/GatewayConsentService.
+                        // The revoked-parties list is a deliberately public
+                        // transparency endpoint per the design doc, needing
+                        // no authentication at all.
+                        .requestMatchers(
+                                "/v1/gateway/**",
+                                "/v1/admin/relying-parties/revoked"
+                        ).permitAll()
                         // springdoc-generated OpenAPI spec + Swagger UI —
                         // paths here are matched AFTER context-path (/api)
                         // is stripped, same as the auth paths above.

@@ -107,6 +107,40 @@ app:
   pepper-version: ${PEPPER_VERSION:v1}
 
 # ==========================================================================
+# ID CARD QR SIGNING (QrCodeService) — same no-default discipline as
+# ENCRYPTION_KEY/PEPPER_SECRET above; see that class's field comment.
+# ==========================================================================
+idcard:
+  qr:
+    secret: ${IDCARD_QR_SECRET}
+
+# ==========================================================================
+# BENEFIT DISBURSEMENT CALLBACK (BenefitDisbursementController) — shared-
+# secret auth for the payment-rail settlement webhook. No default: an
+# unset secret means the endpoint always rejects (fail closed) rather
+# than accepting callbacks unauthenticated. See
+# BenefitDisbursementService's class Javadoc for why this is a shared
+# secret rather than the mTLS the design doc calls for elsewhere — no
+# real payment-rail integration exists yet to hold a certificate against.
+# ==========================================================================
+benefits:
+  callback:
+    # Empty-string default (not the SpEL #{null} idiom — that only
+    # resolves inside a Java @Value annotation, not a YAML property
+    # placeholder default) — an unset env var means an empty secret,
+    # which the controller treats as "always reject" the same as a
+    # missing one.
+    secret: ${BENEFITS_CALLBACK_SECRET:}
+
+# ==========================================================================
+# EVIDENCE EXCHANGE CALLBACK (EvidenceRequestController) — same shared-
+# secret, fail-closed pattern as BENEFITS_CALLBACK_SECRET above.
+# ==========================================================================
+evidence-exchange:
+  callback:
+    secret: ${EVIDENCE_EXCHANGE_CALLBACK_SECRET:}
+
+# ==========================================================================
 # JWT — RS256 key pair (see auth module's JwtService / JwtProperties)
 #
 # JWT_PRIVATE_KEY_PEM / JWT_PUBLIC_KEY_PEM: inject the actual PEM content

@@ -34,6 +34,9 @@
         <module>modules/platform-grievance</module>
         <module>modules/platform-audit</module>
         <module>modules/platform-vital-events</module>
+        <module>modules/platform-benefits</module>
+        <module>modules/platform-evidence-exchange</module>
+        <module>modules/platform-gateway</module>
         <module>modules/bootstrap</module>
     </modules>
 
