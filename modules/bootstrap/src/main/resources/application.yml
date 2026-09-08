@@ -133,6 +133,14 @@ benefits:
     secret: ${BENEFITS_CALLBACK_SECRET:}
 
 # ==========================================================================
+# EVIDENCE EXCHANGE CALLBACK (EvidenceRequestController) — same shared-
+# secret, fail-closed pattern as BENEFITS_CALLBACK_SECRET above.
+# ==========================================================================
+evidence-exchange:
+  callback:
+    secret: ${EVIDENCE_EXCHANGE_CALLBACK_SECRET:}
+
+# ==========================================================================
 # JWT — RS256 key pair (see auth module's JwtService / JwtProperties)
 #
 # JWT_PRIVATE_KEY_PEM / JWT_PUBLIC_KEY_PEM: inject the actual PEM content

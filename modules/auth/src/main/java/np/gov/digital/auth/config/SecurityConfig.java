@@ -66,6 +66,12 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/v1/benefits/disburse/*/callback"
                         ).permitAll()
+                        // Same reasoning as the benefits callback above —
+                        // a real DAO/NIDMC/Election Commission response
+                        // handler has no citizen/admin JWT to present.
+                        .requestMatchers(
+                                "/v1/evidence-exchange/requests/*/callback"
+                        ).permitAll()
                         // springdoc-generated OpenAPI spec + Swagger UI —
                         // paths here are matched AFTER context-path (/api)
                         // is stripped, same as the auth paths above.
