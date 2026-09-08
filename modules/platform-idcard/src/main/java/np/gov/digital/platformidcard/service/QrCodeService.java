@@ -28,7 +28,15 @@ import java.util.Map;
 @Service
 public class QrCodeService {
 
-    @Value("${idcard.qr.secret:default-secret-change-in-prod}")
+    // SECURITY FIX: had a default of "default-secret-change-in-prod" —
+    // the exact same class of bug as the old ENCRYPTION_KEY/PEPPER_SECRET
+    // defaults fixed elsewhere in this codebase (see NidEncryptionUtil's
+    // constructor validation comment). Anyone with repo access already
+    // knows this literal string, so any deployment that forgot to set
+    // idcard.qr.secret would sign every ID card's QR token with a secret
+    // that provides no actual integrity guarantee — a forged card would
+    // verify as VALID. No default: fails to start instead.
+    @Value("${idcard.qr.secret}")
     private String qrSecret;
 
     @Value("${app.base-url:http://localhost:8080}")
