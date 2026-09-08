@@ -51,6 +51,22 @@
             <scope>provided</scope>
         </dependency>
 
+        <!-- Citizen entity/repository — official_document rows are
+             always issued to/about a real citizen (V38). This module had
+             no persistence at all before; every prior "TODO: save to DB"
+             in IdCardController is what this dependency now makes real. -->
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>citizen-registry-service</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Audit logging for document issuance/revocation. -->
+        <dependency>
+            <groupId>np.gov.digital</groupId>
+            <artifactId>platform-audit</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
     </dependencies>
     <artifactId>platform-idcard</artifactId>
     <packaging>jar</packaging>

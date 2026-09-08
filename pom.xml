@@ -33,6 +33,7 @@
         <module>modules/platform-sync</module>
         <module>modules/platform-grievance</module>
         <module>modules/platform-audit</module>
+        <module>modules/platform-vital-events</module>
         <module>modules/bootstrap</module>
     </modules>
 

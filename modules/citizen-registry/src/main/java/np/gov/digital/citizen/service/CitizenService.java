@@ -230,6 +230,63 @@ public class CitizenService {
                 .build();
     }
 
+    // Creates the citizen record for a newborn once a birth_record's
+    // vital_event has been APPROVED (SDD Extended Modules §4.2).
+    // Deliberately NOT a call into registerCitizen() above — that method
+    // requires an NID and a citizenship number (@NotBlank on
+    // CitizenRegistrationRequest), neither of which a newborn has yet;
+    // citizen.nid_hash and citizen.citizenship_no_norm had to be relaxed
+    // to nullable (V33) specifically to allow this. Called from
+    // platform-vital-events' BirthRegistrationService, which owns the
+    // approval workflow itself — this method's only job is "given an
+    // approved birth's facts, create the resulting citizen."
+    @Transactional
+    public Citizen registerNewbornFromBirthEvent(
+            UUID wardId, String nameNp, String nameEn, String sex,
+            String dob, String birthRegistrationNo, UUID actorId) {
+
+        Ward ward = wardRepository.findById(wardId)
+                .orElseThrow(() -> new WardNotFoundException(wardId));
+
+        String dobEnc = nidEncryptionUtil.encrypt(dob);
+
+        Citizen citizen = Citizen.builder()
+                .ward(ward)
+                .nameNp(nameNp)
+                .nameEn(nameEn)
+                .dobEnc(dobEnc)
+                .sex(sex)
+                .consentRecordedAt(Instant.now())
+                .consentChannel(np.gov.digital.citizen.enums.ConsentChannel.WARD_OFFICE)
+                .syncStatus(SyncStatus.SYNCED)
+                .nidVerified(false)
+                .isAsyncVerified(false)
+                .hasSmartphone(false)
+                .status(CitizenStatus.ACTIVE)
+                .registrationStage(np.gov.digital.citizen.enums.RegistrationStage.BIRTH_REGISTERED)
+                .birthRegistrationNo(birthRegistrationNo)
+                .versionNumber(1)
+                .createdBy(actorId)
+                .build();
+
+        // saveAndFlush — see the identical comment on registerCitizen()
+        // above: the audit log write below is a raw JDBC statement on the
+        // same transaction and needs the citizen row to physically exist
+        // first.
+        Citizen saved = citizenRepository.saveAndFlush(citizen);
+
+        auditLogService.log(
+                AuditEventType.CITIZEN_REGISTERED,
+                saved.getId(),
+                "Citizen registered from approved birth record — ward: " + ward.getId()
+        );
+
+        log.info("Newborn citizen registered from birth event — citizenId: {}, wardId: {}",
+                saved.getId(), ward.getId());
+
+        return saved;
+    }
+
     // READ — single profile, decrypted for an authorized viewer.
     // Deliberately a separate DTO from CitizenRegistrationResponse, which is
     // scoped to "just confirm the registration succeeded," not a full view.
@@ -314,6 +371,95 @@ public class CitizenService {
         );
 
         log.info("Citizen deactivated — citizenId: {}, status: {}", citizenId, voidStatus);
+    }
+
+    // The DECEASED half of the comment above: called from
+    // platform-vital-events' DeathRegistrationService once a death event is
+    // APPROVED (SDD Extended Modules §4.3), never directly by an admin
+    // action — a death is established through the death_record/verbal
+    // autopsy workflow, not a generic status edit.
+    @Transactional
+    public void markDeceased(UUID citizenId, UUID actorId) {
+        Citizen citizen = citizenRepository.findById(citizenId)
+                .filter(Citizen::getIsActive)
+                .orElseThrow(() -> new CitizenNotFoundException(citizenId));
+
+        if (citizen.getStatus() == CitizenStatus.DECEASED) {
+            // Should already have been caught by DeathRegistrationService's
+            // own duplicate check before this is ever called — this is the
+            // final backstop against a race between two concurrent
+            // approvals for the same citizen.
+            throw new IllegalStateException("Citizen " + citizenId + " is already marked DECEASED.");
+        }
+
+        citizen.setStatus(CitizenStatus.DECEASED);
+        citizen.setArchivedAt(Instant.now());
+        citizen.setArchivedBy(actorId);
+        citizenRepository.save(citizen);
+
+        auditLogService.log(
+                AuditEventType.CITIZEN_ARCHIVED,
+                citizenId,
+                "Citizen marked DECEASED following an approved death registration"
+        );
+
+        log.info("Citizen marked DECEASED — citizenId: {}", citizenId);
+    }
+
+    // Called from platform-vital-events' MarriageRegistrationService once
+    // a marriage event is APPROVED (SDD Extended Modules §4.4) — sets
+    // both spouses' maritalStatus and bidirectional spouseCitizenId link
+    // in one call per citizen (the caller invokes this once per spouse).
+    @Transactional
+    public void updateMaritalStatus(UUID citizenId, np.gov.digital.citizen.enums.MaritalStatus newStatus,
+                                     UUID spouseCitizenId, UUID actorId) {
+        Citizen citizen = citizenRepository.findById(citizenId)
+                .filter(Citizen::getIsActive)
+                .orElseThrow(() -> new CitizenNotFoundException(citizenId));
+
+        citizen.setMaritalStatus(newStatus);
+        citizen.setSpouseCitizenId(spouseCitizenId);
+        citizenRepository.save(citizen);
+
+        auditLogService.log(
+                AuditEventType.CITIZEN_UPDATED,
+                citizenId,
+                "Marital status changed to " + newStatus
+                        + (spouseCitizenId != null ? " (spouse: " + spouseCitizenId + ")" : "")
+        );
+
+        log.info("Marital status updated — citizenId: {}, newStatus: {}", citizenId, newStatus);
+    }
+
+    // Reassigns which ward a citizen belongs to. Deliberately a generic,
+    // low-level "just do it" operation with no policy of its own (e.g. no
+    // same-municipality restriction) — callers decide what transfers are
+    // allowed for their own workflow. MarriageRegistrationService (§4.4)
+    // only allows a same-municipality transfer as part of a marriage;
+    // migration_record (§4.6, not yet built) will be the place a genuine
+    // cross-municipality transfer goes through its own two-party Local
+    // Body Admin handoff before calling this.
+    @Transactional
+    public void transferWard(UUID citizenId, UUID newWardId, UUID actorId) {
+        Citizen citizen = citizenRepository.findById(citizenId)
+                .filter(Citizen::getIsActive)
+                .orElseThrow(() -> new CitizenNotFoundException(citizenId));
+
+        Ward newWard = wardRepository.findById(newWardId)
+                .orElseThrow(() -> new WardNotFoundException(newWardId));
+
+        UUID previousWardId = citizen.getWard().getId();
+        citizen.setWard(newWard);
+        citizenRepository.save(citizen);
+
+        auditLogService.log(
+                AuditEventType.CITIZEN_UPDATED,
+                citizenId,
+                "Ward transferred from " + previousWardId + " to " + newWardId
+        );
+
+        log.info("Citizen ward transferred — citizenId: {}, from: {}, to: {}",
+                citizenId, previousWardId, newWardId);
     }
 
     // PRIVATE HELPERS
