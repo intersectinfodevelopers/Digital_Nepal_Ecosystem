@@ -1,6 +1,7 @@
 package np.gov.digital.platformaudit.filter;
 
 import lombok.extern.slf4j.Slf4j;
+import np.gov.digital.platformaudit.audit.AuthenticatedActor;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -8,7 +9,6 @@ import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -81,12 +81,19 @@ public class RequirePermissionAspect {
         return joinPoint.proceed();
     }
 
+    // BUG FIX: this checked `auth instanceof JwtAuthenticationToken` — the
+    // type Spring's OAuth2 resource-server JWT decoder produces, not what
+    // this app's own custom JwtAuthenticationFilter actually puts in the
+    // SecurityContext. Currently unused anywhere (no controller method
+    // carries @RequirePermission yet), but as written this would have
+    // returned "UNKNOWN" — and therefore denied — for every real request,
+    // the moment anyone wired it up. Fixed to match the same
+    // AuthenticatedActor pattern used elsewhere.
     private String extractRole() {
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth instanceof JwtAuthenticationToken jwtAuth) {
-                Object role = jwtAuth.getToken().getClaims().get("role");
-                return role != null ? role.toString() : "UNKNOWN";
+            if (auth != null && auth.getPrincipal() instanceof AuthenticatedActor actor) {
+                return actor.getRole();
             }
         } catch (Exception e) {
             log.trace("RequirePermissionAspect: could not extract role: {}", e.getMessage());

@@ -12,7 +12,9 @@ import np.gov.digital.citizen.dto.CitizenProfileResponse;
 import np.gov.digital.citizen.dto.CitizenRegistrationRequest;
 import np.gov.digital.citizen.dto.CitizenRegistrationResponse;
 import np.gov.digital.citizen.dto.CitizenSummaryResponse;
+import np.gov.digital.citizen.enums.CitizenStatus;
 import np.gov.digital.citizen.exception.CitizenNotFoundException;
+import np.gov.digital.citizen.exception.DuplicateCitizenshipException;
 import np.gov.digital.citizen.exception.DuplicateNidException;
 import np.gov.digital.citizen.exception.WardNotFoundException;
 import np.gov.digital.citizen.service.CitizenService;
@@ -63,28 +65,35 @@ public class CitizenController {
 
     @Operation(
             summary = "Deactivate a citizen record",
-            description = "Soft-delete only — sets isActive = false, never a hard delete. "
-                    + "Requires LOCAL_BODY_ADMIN role.")
+            description = "Soft-delete only — never a hard delete. Requires LOCAL_BODY_ADMIN role. "
+                    + "voidStatus must be VOIDED_DUPLICATE or VOIDED_FRAUD; DECEASED and "
+                    + "RENOUNCED_CITIZENSHIP go through their own dedicated vital-event workflows, not this endpoint.")
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "Deactivated"),
+            @ApiResponse(responseCode = "400", description = "voidStatus was not VOIDED_DUPLICATE or VOIDED_FRAUD"),
             @ApiResponse(responseCode = "404", description = "No active citizen with this ID")
     })
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('LOCAL_BODY_ADMIN')")
     public ResponseEntity<Void> deactivate(
             @Parameter(description = "Citizen ID") @PathVariable UUID id,
+            @Parameter(description = "VOIDED_DUPLICATE or VOIDED_FRAUD") @RequestParam CitizenStatus voidStatus,
             @Parameter(description = "Reason for deactivation, optional") @RequestParam(required = false) String reason) {
-        citizenService.deactivate(id, reason);
+        citizenService.deactivate(id, voidStatus, reason);
         return ResponseEntity.noContent().build();
     }
 
     @Operation(
             summary = "Register a new citizen",
-            description = "Requires WARD_ADMIN or LOCAL_BODY_ADMIN role.")
+            description = "Requires WARD_ADMIN or LOCAL_BODY_ADMIN role. NID and citizenship number "
+                    + "are legally independent documents and are deduplicated independently — either "
+                    + "one already being registered blocks the request on its own.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Citizen registered"),
             @ApiResponse(responseCode = "404", description = "Ward does not exist"),
-            @ApiResponse(responseCode = "409", description = "A citizen with this NID is already registered")
+            @ApiResponse(responseCode = "409", description = "A citizen with this NID is already registered, "
+                    + "OR a citizen with this citizenship number is already registered — see the response "
+                    + "body's \"error\" field (DUPLICATE_NID / DUPLICATE_CITIZENSHIP) to tell them apart")
     })
     // POST /api/v1/citizens/register
     @PostMapping("/register")
@@ -108,6 +117,18 @@ public class CitizenController {
         ));
     }
 
+    // 409 Conflict — ERR_DUPLICATE_CITIZENSHIP (Ext. Modules §9). Citizenship
+    // number dedupes independently of NID.
+    @ExceptionHandler(DuplicateCitizenshipException.class)
+    public ResponseEntity<Map<String, String>> handleDuplicateCitizenship(DuplicateCitizenshipException ex) {
+        log.warn("Duplicate citizenship-number registration blocked");
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                "error", "DUPLICATE_CITIZENSHIP",
+                "message", "An active citizen is already registered with this citizenship number",
+                "status", "409"
+        ));
+    }
+
     // 404 Not Found — ward does not exist.
     @ExceptionHandler(WardNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleWardNotFound(WardNotFoundException ex) {
@@ -125,6 +146,17 @@ public class CitizenController {
                 "error", "CITIZEN_NOT_FOUND",
                 "message", ex.getMessage(),
                 "status", "404"
+        ));
+    }
+
+    // 400 Bad Request — e.g. deactivate() called with a voidStatus outside
+    // the allowed VOIDED_DUPLICATE/VOIDED_FRAUD set.
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                "error", "INVALID_REQUEST",
+                "message", ex.getMessage(),
+                "status", "400"
         ));
     }
 }

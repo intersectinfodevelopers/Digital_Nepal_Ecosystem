@@ -64,6 +64,21 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/actuator/health"
                         ).permitAll()
+                        // BUG FIX: any unhandled exception thrown while
+                        // servicing an unauthenticated request (e.g. login)
+                        // — including ones with nothing to do with auth,
+                        // like the refresh-token column-width bug fixed in
+                        // V32 — makes Spring MVC internally forward to
+                        // /error to render it. Without /error itself being
+                        // permitAll, that internal forward was intercepted
+                        // by this same AuthorizationFilter and rejected as
+                        // an unauthenticated request to a protected path,
+                        // so the caller only ever saw an opaque, bodiless
+                        // 403 Forbidden — never the real 400/500 — for
+                        // every failure on a public endpoint. Confirmed via
+                        // a real login attempt against a freshly migrated
+                        // database.
+                        .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(

@@ -2,9 +2,15 @@ package np.gov.digital.citizen.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import np.gov.digital.citizen.enums.CitizenStatus;
+import np.gov.digital.citizen.enums.CitizenshipType;
 import np.gov.digital.citizen.enums.ConsentChannel;
 import np.gov.digital.citizen.enums.DigitalLiteracy;
+import np.gov.digital.citizen.enums.MaritalStatus;
+import np.gov.digital.citizen.enums.RegistrationStage;
 import np.gov.digital.citizen.enums.SyncStatus;
+import org.hibernate.annotations.Generated;
+import org.hibernate.generator.EventType;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -39,10 +45,13 @@ public class Citizen {
     @JoinColumn(name = "ward_id", nullable = false)
     private Ward ward;
 
-    // Identity - PII fields (encrypted at application layer)
-    // AES-256/GCM encrypted National ID number.
-    @Column(name = "nid_enc")
-    private String nidEnc;
+    // Identity - PII fields
+    // Reference into identity_vault (Extended Modules §2.3) — the citizen
+    // row never holds NID ciphertext directly. Resolve via
+    // IdentityVaultService, not by reading this column's target row
+    // yourself.
+    @Column(name = "nid_ref")
+    private UUID nidRef;
 
     // DEPRECATED — plain SHA-256 hash of the plaintext NID, no pepper.
     // Kept only during the V16 backfill transition. New code should read/
@@ -56,13 +65,21 @@ public class Citizen {
     @Column(name = "nid_hmac", length = 64)
     private String nidHmac;
 
-    // AES-256/GCM encrypted citizenship certificate number.
-    @Column(name = "citizenship_no_enc")
-    private String citizenshipNoEnc;
+    // Reference into identity_vault (Extended Modules §2.3) — same pattern
+    // as nidRef.
+    @Column(name = "citizenship_ref")
+    private UUID citizenshipRef;
 
     // Alphanumeric-sanitized citizenship number (dashes and slashes stripped).
+    // Internal-only — scoped to the family-link join, never returned by any
+    // API. Duplicate detection uses citizenshipHmac instead (V28).
     @Column(name = "citizenship_no_norm", nullable = false, length = 100)
     private String citizenshipNoNorm;
+
+    // HMAC-SHA256(citizenshipNo, pepper) — independent dedup from nid_hmac;
+    // either document can block a duplicate registration on its own.
+    @Column(name = "citizenship_hmac", length = 64)
+    private String citizenshipHmac;
 
     // AES-256/GCM encrypted passport number. Nullable — not all citizens have passports.
     @Column(name = "passport_no_enc")
@@ -161,19 +178,51 @@ public class Citizen {
     @Column(name = "registration_channel", length = 50)
     private String registrationChannel;
 
-    // APPROVAL / ARCHIVE STATUS
-    @Column(name = "archive_status", length = 30)
-    private String archiveStatus;
-
     // OPTIMISTIC LOCKING — offline conflict detection
     @Column(name = "version_number", nullable = false)
     @Builder.Default
     private Integer versionNumber = 1;
 
-    // SOFT DELETE
-    @Column(name = "is_active", nullable = false)
+    // LIFECYCLE STATUS (V27 / Extended Modules §2.1) — the authoritative
+    // field for why a citizen record is or isn't active. Supersedes the
+    // old archive_status column, which was never actually wired to any
+    // service logic.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 30)
     @Builder.Default
-    private Boolean isActive = true;
+    private CitizenStatus status = CitizenStatus.ACTIVE;
+
+    // GENERATED ALWAYS AS (status = 'ACTIVE') STORED — read-only from
+    // Hibernate's side. @Generated tells Hibernate to re-SELECT this
+    // column after every INSERT/UPDATE rather than trust whatever value
+    // (if any) is sitting in the Java field.
+    @Generated(event = {EventType.INSERT, EventType.UPDATE})
+    @Column(name = "is_active", insertable = false, updatable = false)
+    private Boolean isActive;
+
+    // PROGRESSIVE IDENTITY (Concept Document §4 / Extended Modules §2.1)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "registration_stage", nullable = false, length = 30)
+    @Builder.Default
+    private RegistrationStage registrationStage = RegistrationStage.DOCUMENT_REGISTERED;
+
+    @Column(name = "birth_registration_no", length = 40, unique = true)
+    private String birthRegistrationNo;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "citizenship_type", length = 20)
+    private CitizenshipType citizenshipType;
+
+    // Not a JPA relationship — plain FK reference, same pattern as
+    // createdBy/archivedBy. Set/cleared by the (future) marriage/divorce
+    // vital-event workflow, not by ordinary citizen CRUD.
+    @Column(name = "spouse_citizen_id")
+    private UUID spouseCitizenId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "marital_status", nullable = false, length = 20)
+    @Builder.Default
+    private MaritalStatus maritalStatus = MaritalStatus.SINGLE;
 
     @Column(name = "archived_at")
     private Instant archivedAt;
@@ -199,7 +248,6 @@ public class Citizen {
         this.createdAt = Instant.now();
         this.updatedAt = Instant.now();
         if (this.versionNumber == null) this.versionNumber = 1;
-        if (this.isActive == null) this.isActive = true;
         if (this.syncStatus == null) this.syncStatus = SyncStatus.SYNCED;
     }
 

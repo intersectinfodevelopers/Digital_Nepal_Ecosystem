@@ -19,7 +19,12 @@ public class RefreshToken {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false, unique = true, length = 512)
+    // BUG FIX: was length = 512 (VARCHAR(512)) — the real RS256 JWT refresh
+    // token JwtService generates routinely exceeds that, which failed every
+    // login with a DataIntegrityViolationException on insert (see V32
+    // migration). columnDefinition="TEXT" matches the widened column;
+    // `length` is meaningless once columnDefinition is set explicitly.
+    @Column(nullable = false, unique = true, columnDefinition = "TEXT")
     private String token;
 
     @ManyToOne(fetch = FetchType.LAZY)
